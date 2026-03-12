@@ -1,0 +1,440 @@
+import { useState } from "react";
+import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Plus, Pencil, Trash2 } from "lucide-react";
+import { toast } from "sonner";
+
+// ===== PRINTERS TAB =====
+function PrintersTab() {
+  const { user } = useAuth();
+  const qc = useQueryClient();
+  const [open, setOpen] = useState(false);
+  const [editId, setEditId] = useState<string | null>(null);
+  const [form, setForm] = useState({
+    name: "", purchase_cost: 0, lifespan_hours: 2000, power_consumption_watts: 200,
+    energy_cost_per_kwh: 0.8, maintenance_cost_per_hour: 0.5,
+  });
+
+  const { data: printers = [] } = useQuery({
+    queryKey: ["printers", user?.id],
+    queryFn: async () => {
+      const { data } = await supabase.from("printers").select("*").eq("user_id", user!.id).order("created_at", { ascending: false });
+      return data ?? [];
+    },
+    enabled: !!user,
+  });
+
+  const save = useMutation({
+    mutationFn: async () => {
+      const payload = { ...form, user_id: user!.id };
+      if (editId) {
+        const { user_id, ...updatePayload } = payload;
+        const { error } = await supabase.from("printers").update(updatePayload).eq("id", editId);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from("printers").insert(payload);
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["printers"] });
+      setOpen(false);
+      setEditId(null);
+      toast.success("Impressora salva!");
+    },
+    onError: (e: any) => toast.error(e.message),
+  });
+
+  const remove = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("printers").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["printers"] }); toast.success("Removida!"); },
+  });
+
+  const openEdit = (p: any) => {
+    setForm({
+      name: p.name, purchase_cost: p.purchase_cost, lifespan_hours: p.lifespan_hours,
+      power_consumption_watts: p.power_consumption_watts, energy_cost_per_kwh: p.energy_cost_per_kwh,
+      maintenance_cost_per_hour: p.maintenance_cost_per_hour,
+    });
+    setEditId(p.id);
+    setOpen(true);
+  };
+
+  // Calculate cost preview
+  const costPerHour = (form.purchase_cost / Math.max(form.lifespan_hours, 1)) + ((form.power_consumption_watts / 1000) * form.energy_cost_per_kwh) + form.maintenance_cost_per_hour;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex justify-end">
+        <Dialog open={open} onOpenChange={setOpen}>
+          <DialogTrigger asChild>
+            <Button onClick={() => { setEditId(null); setForm({ name: "", purchase_cost: 0, lifespan_hours: 2000, power_consumption_watts: 200, energy_cost_per_kwh: 0.8, maintenance_cost_per_hour: 0.5 }); }}>
+              <Plus className="h-4 w-4 mr-1" /> Nova Impressora
+            </Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader><DialogTitle>{editId ? "Editar" : "Nova"} Impressora</DialogTitle></DialogHeader>
+            <form onSubmit={(e) => { e.preventDefault(); save.mutate(); }} className="space-y-4">
+              <div className="space-y-2">
+                <Label>Nome *</Label>
+                <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2"><Label>Custo da Impressora (R$)</Label><Input type="number" min={0} step={0.01} value={form.purchase_cost} onChange={(e) => setForm({ ...form, purchase_cost: +e.target.value })} /></div>
+                <div className="space-y-2"><Label>Vida Útil (horas)</Label><Input type="number" min={1} value={form.lifespan_hours} onChange={(e) => setForm({ ...form, lifespan_hours: +e.target.value })} /></div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2"><Label>Consumo (Watts)</Label><Input type="number" min={0} value={form.power_consumption_watts} onChange={(e) => setForm({ ...form, power_consumption_watts: +e.target.value })} /></div>
+                <div className="space-y-2"><Label>Custo Energia (R$/kWh)</Label><Input type="number" min={0} step={0.01} value={form.energy_cost_per_kwh} onChange={(e) => setForm({ ...form, energy_cost_per_kwh: +e.target.value })} /></div>
+              </div>
+              <div className="space-y-2"><Label>Manutenção (R$/hora)</Label><Input type="number" min={0} step={0.01} value={form.maintenance_cost_per_hour} onChange={(e) => setForm({ ...form, maintenance_cost_per_hour: +e.target.value })} /></div>
+              <Card className="bg-primary/5 border-primary/20">
+                <CardContent className="pt-4 text-center">
+                  <p className="text-sm text-muted-foreground">Custo por hora calculado</p>
+                  <p className="text-2xl font-bold text-primary">R$ {costPerHour.toFixed(2)}/h</p>
+                </CardContent>
+              </Card>
+              <Button type="submit" className="w-full" disabled={save.isPending}>Salvar</Button>
+            </form>
+          </DialogContent>
+        </Dialog>
+      </div>
+      <Card>
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Nome</TableHead>
+                <TableHead>Custo Aquisição</TableHead>
+                <TableHead>Vida Útil</TableHead>
+                <TableHead>Custo/Hora</TableHead>
+                <TableHead className="w-24"></TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {printers.length === 0 ? (
+                <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-8">Nenhuma impressora</TableCell></TableRow>
+              ) : printers.map((p) => (
+                <TableRow key={p.id}>
+                  <TableCell className="font-medium">{p.name}</TableCell>
+                  <TableCell>R$ {p.purchase_cost.toFixed(2)}</TableCell>
+                  <TableCell>{p.lifespan_hours}h</TableCell>
+                  <TableCell className="font-semibold text-primary">R$ {(p.cost_per_hour ?? 0).toFixed(2)}/h</TableCell>
+                  <TableCell>
+                    <div className="flex gap-1">
+                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(p)}><Pencil className="h-3.5 w-3.5" /></Button>
+                      <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => remove.mutate(p.id)}><Trash2 className="h-3.5 w-3.5" /></Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+// ===== MATERIALS TAB =====
+function MaterialsTab() {
+  const { user } = useAuth();
+  const qc = useQueryClient();
+  const [open, setOpen] = useState(false);
+  const [editId, setEditId] = useState<string | null>(null);
+  const [form, setForm] = useState({ name: "", color: "", brand: "", cost_per_kg: 0, density: 1.24 });
+
+  const { data: materials = [] } = useQuery({
+    queryKey: ["materials", user?.id],
+    queryFn: async () => {
+      const { data } = await supabase.from("materials").select("*").eq("user_id", user!.id).order("created_at", { ascending: false });
+      return data ?? [];
+    },
+    enabled: !!user,
+  });
+
+  const save = useMutation({
+    mutationFn: async () => {
+      if (editId) {
+        const { error } = await supabase.from("materials").update(form).eq("id", editId);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from("materials").insert({ ...form, user_id: user!.id });
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["materials"] }); setOpen(false); setEditId(null); toast.success("Material salvo!"); },
+    onError: (e: any) => toast.error(e.message),
+  });
+
+  const remove = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("materials").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["materials"] }); toast.success("Removido!"); },
+  });
+
+  return (
+    <div className="space-y-4">
+      <div className="flex justify-end">
+        <Dialog open={open} onOpenChange={setOpen}>
+          <DialogTrigger asChild>
+            <Button onClick={() => { setEditId(null); setForm({ name: "", color: "", brand: "", cost_per_kg: 0, density: 1.24 }); }}>
+              <Plus className="h-4 w-4 mr-1" /> Novo Material
+            </Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader><DialogTitle>{editId ? "Editar" : "Novo"} Material</DialogTitle></DialogHeader>
+            <form onSubmit={(e) => { e.preventDefault(); save.mutate(); }} className="space-y-4">
+              <div className="space-y-2"><Label>Material *</Label><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required placeholder="PLA, ABS, PETG..." /></div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2"><Label>Cor</Label><Input value={form.color} onChange={(e) => setForm({ ...form, color: e.target.value })} /></div>
+                <div className="space-y-2"><Label>Marca</Label><Input value={form.brand} onChange={(e) => setForm({ ...form, brand: e.target.value })} /></div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2"><Label>Custo/kg (R$)</Label><Input type="number" min={0} step={0.01} value={form.cost_per_kg} onChange={(e) => setForm({ ...form, cost_per_kg: +e.target.value })} /></div>
+                <div className="space-y-2"><Label>Densidade (g/cm³)</Label><Input type="number" min={0} step={0.01} value={form.density} onChange={(e) => setForm({ ...form, density: +e.target.value })} /></div>
+              </div>
+              <Button type="submit" className="w-full" disabled={save.isPending}>Salvar</Button>
+            </form>
+          </DialogContent>
+        </Dialog>
+      </div>
+      <Card>
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Material</TableHead>
+                <TableHead>Cor</TableHead>
+                <TableHead>Marca</TableHead>
+                <TableHead>Custo/kg</TableHead>
+                <TableHead>Densidade</TableHead>
+                <TableHead className="w-24"></TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {materials.length === 0 ? (
+                <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">Nenhum material</TableCell></TableRow>
+              ) : materials.map((m) => (
+                <TableRow key={m.id}>
+                  <TableCell className="font-medium">{m.name}</TableCell>
+                  <TableCell>{m.color}</TableCell>
+                  <TableCell>{m.brand}</TableCell>
+                  <TableCell>R$ {m.cost_per_kg.toFixed(2)}</TableCell>
+                  <TableCell>{m.density}</TableCell>
+                  <TableCell>
+                    <div className="flex gap-1">
+                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => { setForm({ name: m.name, color: m.color ?? "", brand: m.brand ?? "", cost_per_kg: m.cost_per_kg, density: m.density ?? 1.24 }); setEditId(m.id); setOpen(true); }}>
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => remove.mutate(m.id)}>
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+// ===== SOFTWARE TAB =====
+function SoftwareTab() {
+  const { user } = useAuth();
+  const qc = useQueryClient();
+  const [open, setOpen] = useState(false);
+  const [form, setForm] = useState({ name: "", monthly_cost: 0, category: "" });
+
+  const { data: sw = [] } = useQuery({
+    queryKey: ["software", user?.id],
+    queryFn: async () => {
+      const { data } = await supabase.from("software").select("*").eq("user_id", user!.id).order("created_at", { ascending: false });
+      return data ?? [];
+    },
+    enabled: !!user,
+  });
+
+  const save = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase.from("software").insert({ ...form, user_id: user!.id });
+      if (error) throw error;
+    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["software"] }); setOpen(false); toast.success("Software salvo!"); },
+  });
+
+  const remove = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("software").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["software"] }); toast.success("Removido!"); },
+  });
+
+  return (
+    <div className="space-y-4">
+      <div className="flex justify-end">
+        <Dialog open={open} onOpenChange={setOpen}>
+          <DialogTrigger asChild>
+            <Button onClick={() => setForm({ name: "", monthly_cost: 0, category: "" })}>
+              <Plus className="h-4 w-4 mr-1" /> Novo Software
+            </Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader><DialogTitle>Novo Software</DialogTitle></DialogHeader>
+            <form onSubmit={(e) => { e.preventDefault(); save.mutate(); }} className="space-y-4">
+              <div className="space-y-2"><Label>Nome *</Label><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required /></div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2"><Label>Custo Mensal (R$)</Label><Input type="number" min={0} step={0.01} value={form.monthly_cost} onChange={(e) => setForm({ ...form, monthly_cost: +e.target.value })} /></div>
+                <div className="space-y-2"><Label>Categoria</Label><Input value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} placeholder="Modelagem, Fatiador..." /></div>
+              </div>
+              <Button type="submit" className="w-full" disabled={save.isPending}>Salvar</Button>
+            </form>
+          </DialogContent>
+        </Dialog>
+      </div>
+      <Card>
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Nome</TableHead>
+                <TableHead>Categoria</TableHead>
+                <TableHead>Custo Mensal</TableHead>
+                <TableHead className="w-12"></TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {sw.length === 0 ? (
+                <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground py-8">Nenhum software</TableCell></TableRow>
+              ) : sw.map((s) => (
+                <TableRow key={s.id}>
+                  <TableCell className="font-medium">{s.name}</TableCell>
+                  <TableCell>{s.category}</TableCell>
+                  <TableCell>R$ {s.monthly_cost.toFixed(2)}/mês</TableCell>
+                  <TableCell>
+                    <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => remove.mutate(s.id)}>
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+// ===== PROFILE TAB =====
+function ProfileTab() {
+  const { user } = useAuth();
+  const qc = useQueryClient();
+
+  const { data: profile } = useQuery({
+    queryKey: ["profile", user?.id],
+    queryFn: async () => {
+      const { data } = await supabase.from("profiles").select("*").eq("user_id", user!.id).single();
+      return data;
+    },
+    enabled: !!user,
+  });
+
+  const [form, setForm] = useState({
+    company_name: "", owner_name: "", company_email: "", company_phone: "", company_address: "",
+    hourly_rate: 50, modeling_hourly_rate: 80, default_margin: 30,
+  });
+
+  const [loaded, setLoaded] = useState(false);
+
+  if (profile && !loaded) {
+    setForm({
+      company_name: profile.company_name ?? "",
+      owner_name: profile.owner_name ?? "",
+      company_email: profile.company_email ?? "",
+      company_phone: profile.company_phone ?? "",
+      company_address: profile.company_address ?? "",
+      hourly_rate: profile.hourly_rate ?? 50,
+      modeling_hourly_rate: profile.modeling_hourly_rate ?? 80,
+      default_margin: (profile.default_margin ?? 0.3) * 100,
+    });
+    setLoaded(true);
+  }
+
+  const save = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase.from("profiles").update({
+        ...form,
+        default_margin: form.default_margin / 100,
+      }).eq("user_id", user!.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["profile"] });
+      toast.success("Perfil atualizado!");
+    },
+  });
+
+  return (
+    <Card>
+      <CardHeader><CardTitle>Dados da Empresa</CardTitle></CardHeader>
+      <CardContent>
+        <form onSubmit={(e) => { e.preventDefault(); save.mutate(); }} className="space-y-4 max-w-lg">
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2"><Label>Nome da Empresa</Label><Input value={form.company_name} onChange={(e) => setForm({ ...form, company_name: e.target.value })} /></div>
+            <div className="space-y-2"><Label>Responsável</Label><Input value={form.owner_name} onChange={(e) => setForm({ ...form, owner_name: e.target.value })} /></div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2"><Label>Email</Label><Input value={form.company_email} onChange={(e) => setForm({ ...form, company_email: e.target.value })} /></div>
+            <div className="space-y-2"><Label>Telefone</Label><Input value={form.company_phone} onChange={(e) => setForm({ ...form, company_phone: e.target.value })} /></div>
+          </div>
+          <div className="space-y-2"><Label>Endereço</Label><Input value={form.company_address} onChange={(e) => setForm({ ...form, company_address: e.target.value })} /></div>
+          <div className="grid grid-cols-3 gap-4">
+            <div className="space-y-2"><Label>Valor Hora (R$)</Label><Input type="number" min={0} step={0.01} value={form.hourly_rate} onChange={(e) => setForm({ ...form, hourly_rate: +e.target.value })} /></div>
+            <div className="space-y-2"><Label>Hora Modelagem (R$)</Label><Input type="number" min={0} step={0.01} value={form.modeling_hourly_rate} onChange={(e) => setForm({ ...form, modeling_hourly_rate: +e.target.value })} /></div>
+            <div className="space-y-2"><Label>Margem Padrão (%)</Label><Input type="number" min={0} max={500} value={form.default_margin} onChange={(e) => setForm({ ...form, default_margin: +e.target.value })} /></div>
+          </div>
+          <Button type="submit" disabled={save.isPending}>{save.isPending ? "Salvando..." : "Salvar Perfil"}</Button>
+        </form>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ===== SETTINGS PAGE =====
+export default function SettingsPage() {
+  return (
+    <div className="space-y-6">
+      <h1 className="text-2xl font-bold tracking-tight">Configurações</h1>
+      <Tabs defaultValue="profile">
+        <TabsList>
+          <TabsTrigger value="profile">Perfil</TabsTrigger>
+          <TabsTrigger value="printers">Impressoras</TabsTrigger>
+          <TabsTrigger value="materials">Materiais</TabsTrigger>
+          <TabsTrigger value="software">Softwares</TabsTrigger>
+        </TabsList>
+        <TabsContent value="profile" className="mt-4"><ProfileTab /></TabsContent>
+        <TabsContent value="printers" className="mt-4"><PrintersTab /></TabsContent>
+        <TabsContent value="materials" className="mt-4"><MaterialsTab /></TabsContent>
+        <TabsContent value="software" className="mt-4"><SoftwareTab /></TabsContent>
+      </Tabs>
+    </div>
+  );
+}

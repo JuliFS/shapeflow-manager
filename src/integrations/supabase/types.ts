@@ -14,7 +14,448 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      clients: {
+        Row: {
+          company: string | null
+          created_at: string
+          email: string | null
+          id: string
+          name: string
+          notes: string | null
+          phone: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          company?: string | null
+          created_at?: string
+          email?: string | null
+          id?: string
+          name: string
+          notes?: string | null
+          phone?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          company?: string | null
+          created_at?: string
+          email?: string | null
+          id?: string
+          name?: string
+          notes?: string | null
+          phone?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      filament_stock: {
+        Row: {
+          created_at: string
+          id: string
+          initial_weight_g: number
+          material_id: string | null
+          material_name: string
+          remaining_weight_g: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          initial_weight_g?: number
+          material_id?: string | null
+          material_name: string
+          remaining_weight_g?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          initial_weight_g?: number
+          material_id?: string | null
+          material_name?: string
+          remaining_weight_g?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "filament_stock_material_id_fkey"
+            columns: ["material_id"]
+            isOneToOne: false
+            referencedRelation: "materials"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      financial_records: {
+        Row: {
+          amount: number
+          category: string | null
+          created_at: string
+          date: string
+          description: string | null
+          id: string
+          order_id: string | null
+          type: string
+          user_id: string
+        }
+        Insert: {
+          amount?: number
+          category?: string | null
+          created_at?: string
+          date?: string
+          description?: string | null
+          id?: string
+          order_id?: string | null
+          type: string
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          category?: string | null
+          created_at?: string
+          date?: string
+          description?: string | null
+          id?: string
+          order_id?: string | null
+          type?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "financial_records_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      materials: {
+        Row: {
+          brand: string | null
+          color: string | null
+          cost_per_kg: number
+          created_at: string
+          density: number | null
+          id: string
+          name: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          brand?: string | null
+          color?: string | null
+          cost_per_kg?: number
+          created_at?: string
+          density?: number | null
+          id?: string
+          name: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          brand?: string | null
+          color?: string | null
+          cost_per_kg?: number
+          created_at?: string
+          density?: number | null
+          id?: string
+          name?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      orders: {
+        Row: {
+          client_name: string | null
+          created_at: string
+          final_price: number | null
+          id: string
+          piece_name: string | null
+          quote_id: string | null
+          quote_number: string | null
+          status: Database["public"]["Enums"]["order_status"]
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          client_name?: string | null
+          created_at?: string
+          final_price?: number | null
+          id?: string
+          piece_name?: string | null
+          quote_id?: string | null
+          quote_number?: string | null
+          status?: Database["public"]["Enums"]["order_status"]
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          client_name?: string | null
+          created_at?: string
+          final_price?: number | null
+          id?: string
+          piece_name?: string | null
+          quote_id?: string | null
+          quote_number?: string | null
+          status?: Database["public"]["Enums"]["order_status"]
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "orders_quote_id_fkey"
+            columns: ["quote_id"]
+            isOneToOne: false
+            referencedRelation: "quotes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      printers: {
+        Row: {
+          cost_per_hour: number | null
+          created_at: string
+          energy_cost_per_kwh: number
+          id: string
+          lifespan_hours: number
+          maintenance_cost_per_hour: number
+          name: string
+          power_consumption_watts: number
+          purchase_cost: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          cost_per_hour?: number | null
+          created_at?: string
+          energy_cost_per_kwh?: number
+          id?: string
+          lifespan_hours?: number
+          maintenance_cost_per_hour?: number
+          name: string
+          power_consumption_watts?: number
+          purchase_cost?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          cost_per_hour?: number | null
+          created_at?: string
+          energy_cost_per_kwh?: number
+          id?: string
+          lifespan_hours?: number
+          maintenance_cost_per_hour?: number
+          name?: string
+          power_consumption_watts?: number
+          purchase_cost?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          company_address: string | null
+          company_email: string | null
+          company_logo_url: string | null
+          company_name: string | null
+          company_phone: string | null
+          created_at: string
+          default_margin: number | null
+          hourly_rate: number | null
+          id: string
+          modeling_hourly_rate: number | null
+          owner_name: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          company_address?: string | null
+          company_email?: string | null
+          company_logo_url?: string | null
+          company_name?: string | null
+          company_phone?: string | null
+          created_at?: string
+          default_margin?: number | null
+          hourly_rate?: number | null
+          id?: string
+          modeling_hourly_rate?: number | null
+          owner_name?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          company_address?: string | null
+          company_email?: string | null
+          company_logo_url?: string | null
+          company_name?: string | null
+          company_phone?: string | null
+          created_at?: string
+          default_margin?: number | null
+          hourly_rate?: number | null
+          id?: string
+          modeling_hourly_rate?: number | null
+          owner_name?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      quotes: {
+        Row: {
+          client_id: string | null
+          client_name: string | null
+          created_at: string
+          delivery_days: number | null
+          final_price: number | null
+          finishing: string | null
+          has_modeling: boolean | null
+          id: string
+          labor_cost: number | null
+          machine_cost: number | null
+          margin: number | null
+          material_cost: number | null
+          material_id: string | null
+          material_name: string | null
+          modeling_cost: number | null
+          modeling_hours: number | null
+          payment_method: string | null
+          piece_name: string
+          post_processing_hours: number
+          print_time_hours: number
+          printer_id: string | null
+          printer_name: string | null
+          quote_number: string
+          status: Database["public"]["Enums"]["quote_status"]
+          stl_file_url: string | null
+          total_cost: number | null
+          updated_at: string
+          user_id: string
+          weight_grams: number
+        }
+        Insert: {
+          client_id?: string | null
+          client_name?: string | null
+          created_at?: string
+          delivery_days?: number | null
+          final_price?: number | null
+          finishing?: string | null
+          has_modeling?: boolean | null
+          id?: string
+          labor_cost?: number | null
+          machine_cost?: number | null
+          margin?: number | null
+          material_cost?: number | null
+          material_id?: string | null
+          material_name?: string | null
+          modeling_cost?: number | null
+          modeling_hours?: number | null
+          payment_method?: string | null
+          piece_name: string
+          post_processing_hours?: number
+          print_time_hours?: number
+          printer_id?: string | null
+          printer_name?: string | null
+          quote_number: string
+          status?: Database["public"]["Enums"]["quote_status"]
+          stl_file_url?: string | null
+          total_cost?: number | null
+          updated_at?: string
+          user_id: string
+          weight_grams?: number
+        }
+        Update: {
+          client_id?: string | null
+          client_name?: string | null
+          created_at?: string
+          delivery_days?: number | null
+          final_price?: number | null
+          finishing?: string | null
+          has_modeling?: boolean | null
+          id?: string
+          labor_cost?: number | null
+          machine_cost?: number | null
+          margin?: number | null
+          material_cost?: number | null
+          material_id?: string | null
+          material_name?: string | null
+          modeling_cost?: number | null
+          modeling_hours?: number | null
+          payment_method?: string | null
+          piece_name?: string
+          post_processing_hours?: number
+          print_time_hours?: number
+          printer_id?: string | null
+          printer_name?: string | null
+          quote_number?: string
+          status?: Database["public"]["Enums"]["quote_status"]
+          stl_file_url?: string | null
+          total_cost?: number | null
+          updated_at?: string
+          user_id?: string
+          weight_grams?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "quotes_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "quotes_material_id_fkey"
+            columns: ["material_id"]
+            isOneToOne: false
+            referencedRelation: "materials"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "quotes_printer_id_fkey"
+            columns: ["printer_id"]
+            isOneToOne: false
+            referencedRelation: "printers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      software: {
+        Row: {
+          category: string | null
+          created_at: string
+          id: string
+          monthly_cost: number
+          name: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          category?: string | null
+          created_at?: string
+          id?: string
+          monthly_cost?: number
+          name: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          category?: string | null
+          created_at?: string
+          id?: string
+          monthly_cost?: number
+          name?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
@@ -23,7 +464,13 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
-      [_ in never]: never
+      order_status:
+        | "queue"
+        | "printing"
+        | "post_processing"
+        | "finished"
+        | "delivered"
+      quote_status: "draft" | "sent" | "approved" | "rejected"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +597,15 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      order_status: [
+        "queue",
+        "printing",
+        "post_processing",
+        "finished",
+        "delivered",
+      ],
+      quote_status: ["draft", "sent", "approved", "rejected"],
+    },
   },
 } as const

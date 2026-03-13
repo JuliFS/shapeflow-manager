@@ -17,6 +17,7 @@ export type Database = {
       clients: {
         Row: {
           company: string | null
+          cpf: string | null
           created_at: string
           email: string | null
           id: string
@@ -28,6 +29,7 @@ export type Database = {
         }
         Insert: {
           company?: string | null
+          cpf?: string | null
           created_at?: string
           email?: string | null
           id?: string
@@ -39,6 +41,7 @@ export type Database = {
         }
         Update: {
           company?: string | null
+          cpf?: string | null
           created_at?: string
           email?: string | null
           id?: string
@@ -134,6 +137,42 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      fixed_expenses: {
+        Row: {
+          active: boolean
+          category: string | null
+          created_at: string
+          due_day: number | null
+          id: string
+          monthly_amount: number
+          name: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          active?: boolean
+          category?: string | null
+          created_at?: string
+          due_day?: number | null
+          id?: string
+          monthly_amount?: number
+          name: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          active?: boolean
+          category?: string | null
+          created_at?: string
+          due_day?: number | null
+          id?: string
+          monthly_amount?: number
+          name?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
       }
       materials: {
         Row: {
@@ -260,6 +299,33 @@ export type Database = {
         }
         Relationships: []
       }
+      pro_labore: {
+        Row: {
+          amount: number
+          created_at: string
+          date: string
+          id: string
+          notes: string | null
+          user_id: string
+        }
+        Insert: {
+          amount?: number
+          created_at?: string
+          date?: string
+          id?: string
+          notes?: string | null
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          date?: string
+          id?: string
+          notes?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           company_address: string | null
@@ -308,6 +374,33 @@ export type Database = {
         }
         Relationships: []
       }
+      profit_distribution: {
+        Row: {
+          amount: number
+          created_at: string
+          date: string
+          id: string
+          notes: string | null
+          user_id: string
+        }
+        Insert: {
+          amount?: number
+          created_at?: string
+          date?: string
+          id?: string
+          notes?: string | null
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          date?: string
+          id?: string
+          notes?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       quotes: {
         Row: {
           client_id: string | null
@@ -333,6 +426,7 @@ export type Database = {
           printer_id: string | null
           printer_name: string | null
           quote_number: string
+          shipping_cost: number | null
           status: Database["public"]["Enums"]["quote_status"]
           stl_file_url: string | null
           total_cost: number | null
@@ -364,6 +458,7 @@ export type Database = {
           printer_id?: string | null
           printer_name?: string | null
           quote_number: string
+          shipping_cost?: number | null
           status?: Database["public"]["Enums"]["quote_status"]
           stl_file_url?: string | null
           total_cost?: number | null
@@ -395,6 +490,7 @@ export type Database = {
           printer_id?: string | null
           printer_name?: string | null
           quote_number?: string
+          shipping_cost?: number | null
           status?: Database["public"]["Enums"]["quote_status"]
           stl_file_url?: string | null
           total_cost?: number | null
@@ -451,6 +547,42 @@ export type Database = {
           id?: string
           monthly_cost?: number
           name?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      variable_expenses: {
+        Row: {
+          amount: number
+          category: string | null
+          created_at: string
+          date: string
+          id: string
+          name: string
+          notes: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          amount?: number
+          category?: string | null
+          created_at?: string
+          date?: string
+          id?: string
+          name: string
+          notes?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          category?: string | null
+          created_at?: string
+          date?: string
+          id?: string
+          name?: string
+          notes?: string | null
           updated_at?: string
           user_id?: string
         }

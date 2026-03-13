@@ -8,10 +8,11 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
-import { Plus, FileDown, Upload } from "lucide-react";
+import { Plus, FileDown, Upload, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import jsPDF from "jspdf";
@@ -33,26 +34,31 @@ const statusColors: Record<QuoteStatus, string> = {
   rejected: "bg-destructive/10 text-destructive",
 };
 
+const emptyForm = {
+  client_id: "",
+  piece_name: "",
+  printer_id: "",
+  material_id: "",
+  weight_grams: 0,
+  print_time_hours: 0,
+  finishing: "",
+  post_processing_hours: 0,
+  has_modeling: false,
+  modeling_hours: 0,
+  margin: 0.3,
+  delivery_days: 7,
+  payment_method: "",
+  shipping_cost: 0,
+};
+
 export default function Quotes() {
   const { user } = useAuth();
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
-
-  const [form, setForm] = useState({
-    client_id: "",
-    piece_name: "",
-    printer_id: "",
-    material_id: "",
-    weight_grams: 0,
-    print_time_hours: 0,
-    finishing: "",
-    post_processing_hours: 0,
-    has_modeling: false,
-    modeling_hours: 0,
-    margin: 0.3,
-    delivery_days: 7,
-    payment_method: "",
-  });
+  const [editId, setEditId] = useState<string | null>(null);
+  const [editQuoteNumber, setEditQuoteNumber] = useState<string | null>(null);
+  const [approvedWarning, setApprovedWarning] = useState<any>(null);
+  const [form, setForm] = useState({ ...emptyForm });
 
   const { data: clients = [] } = useQuery({
     queryKey: ["clients", user?.id],
@@ -114,18 +120,14 @@ export default function Quotes() {
     const labor_cost = form.post_processing_hours * hourlyRate;
     const modeling_cost = form.has_modeling ? form.modeling_hours * modelingRate : 0;
     const total_cost = material_cost + machine_cost + labor_cost + modeling_cost;
-    const final_price = total_cost * (1 + form.margin);
+    const final_price = total_cost * (1 + form.margin) + form.shipping_cost;
 
     return { material_cost, machine_cost, labor_cost, modeling_cost, total_cost, final_price };
   }, [form, selectedPrinter, selectedMaterial, profile]);
 
   const save = useMutation({
     mutationFn: async () => {
-      const now = new Date();
-      const quoteNumber = format(now, "ddMMyyyyHHmm");
-      const { error } = await supabase.from("quotes").insert({
-        user_id: user!.id,
-        quote_number: quoteNumber,
+      const payload = {
         client_id: form.client_id || null,
         client_name: selectedClient?.name ?? "",
         piece_name: form.piece_name,
@@ -142,15 +144,31 @@ export default function Quotes() {
         margin: form.margin,
         delivery_days: form.delivery_days,
         payment_method: form.payment_method,
+        shipping_cost: form.shipping_cost,
         ...costs,
-        status: "draft" as QuoteStatus,
-      });
-      if (error) throw error;
+      };
+
+      if (editId) {
+        const { error } = await supabase.from("quotes").update(payload).eq("id", editId);
+        if (error) throw error;
+      } else {
+        const now = new Date();
+        const quoteNumber = format(now, "ddMMyyyyHHmm");
+        const { error } = await supabase.from("quotes").insert({
+          user_id: user!.id,
+          quote_number: quoteNumber,
+          status: "draft" as QuoteStatus,
+          ...payload,
+        });
+        if (error) throw error;
+      }
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["quotes"] });
       setOpen(false);
-      toast.success("Orçamento criado!");
+      setEditId(null);
+      setEditQuoteNumber(null);
+      toast.success(editId ? "Orçamento atualizado!" : "Orçamento criado!");
     },
     onError: (e: any) => toast.error(e.message),
   });
@@ -159,8 +177,6 @@ export default function Quotes() {
     mutationFn: async ({ id, status }: { id: string; status: QuoteStatus }) => {
       const { error } = await supabase.from("quotes").update({ status }).eq("id", id);
       if (error) throw error;
-
-      // If approved, create order
       if (status === "approved") {
         const quote = quotes.find((q) => q.id === id);
         if (quote) {
@@ -184,11 +200,47 @@ export default function Quotes() {
     },
   });
 
+  const openEdit = (q: any) => {
+    if (q.status === "approved") {
+      setApprovedWarning(q);
+      return;
+    }
+    fillFormForEdit(q);
+  };
+
+  const fillFormForEdit = (q: any) => {
+    setForm({
+      client_id: q.client_id ?? "",
+      piece_name: q.piece_name,
+      printer_id: q.printer_id ?? "",
+      material_id: q.material_id ?? "",
+      weight_grams: q.weight_grams ?? 0,
+      print_time_hours: q.print_time_hours ?? 0,
+      finishing: q.finishing ?? "",
+      post_processing_hours: q.post_processing_hours ?? 0,
+      has_modeling: q.has_modeling ?? false,
+      modeling_hours: q.modeling_hours ?? 0,
+      margin: q.margin ?? 0.3,
+      delivery_days: q.delivery_days ?? 7,
+      payment_method: q.payment_method ?? "",
+      shipping_cost: (q as any).shipping_cost ?? 0,
+    });
+    setEditId(q.id);
+    setEditQuoteNumber(q.quote_number);
+    setOpen(true);
+  };
+
+  const openNew = () => {
+    setForm({ ...emptyForm, margin: profile?.default_margin ?? 0.3 });
+    setEditId(null);
+    setEditQuoteNumber(null);
+    setOpen(true);
+  };
+
   const generatePDF = (quote: typeof quotes[0]) => {
     const doc = new jsPDF();
     const pw = doc.internal.pageSize.getWidth();
 
-    // Header
     doc.setFontSize(20);
     doc.setFont("helvetica", "bold");
     doc.text(profile?.company_name || "3D Manager", pw / 2, 25, { align: "center" });
@@ -197,15 +249,12 @@ export default function Quotes() {
     doc.setFont("helvetica", "normal");
     doc.text("ORÇAMENTO", pw / 2, 35, { align: "center" });
 
-    // Quote number
     doc.setFontSize(9);
     doc.text(`Nº ${quote.quote_number}`, pw / 2, 42, { align: "center" });
 
-    // Divider
     doc.setDrawColor(200);
     doc.line(20, 48, pw - 20, 48);
 
-    // Client & date info
     let y = 58;
     doc.setFontSize(10);
     doc.text(`Cliente: ${quote.client_name || "—"}`, 20, y);
@@ -215,7 +264,8 @@ export default function Quotes() {
     y += 8;
     doc.text(`Material: ${quote.material_name || "—"}`, 20, y);
 
-    // Price highlight
+    const shippingCost = (quote as any).shipping_cost ?? 0;
+
     y += 25;
     doc.setFillColor(37, 99, 235);
     doc.roundedRect(30, y - 8, pw - 60, 30, 4, 4, "F");
@@ -229,14 +279,16 @@ export default function Quotes() {
     doc.setTextColor(0, 0, 0);
     doc.setFont("helvetica", "normal");
 
-    // Additional info
     y += 45;
     doc.setFontSize(10);
+    if (shippingCost > 0) {
+      doc.text(`Frete: R$ ${shippingCost.toFixed(2)}`, 20, y);
+      y += 8;
+    }
     doc.text(`Prazo de entrega: ${quote.delivery_days ?? "—"} dias`, 20, y);
     y += 8;
     doc.text(`Forma de pagamento: ${quote.payment_method || "A combinar"}`, 20, y);
 
-    // Footer
     const footerY = doc.internal.pageSize.getHeight() - 20;
     doc.setFontSize(8);
     doc.setTextColor(120);
@@ -267,15 +319,35 @@ export default function Quotes() {
 
   return (
     <div className="space-y-6">
+      {/* Approved edit warning */}
+      <AlertDialog open={!!approvedWarning} onOpenChange={() => setApprovedWarning(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Orçamento Aprovado</AlertDialogTitle>
+            <AlertDialogDescription>
+              Este orçamento já foi aprovado e um pedido foi gerado. Editar pode causar inconsistências. Deseja continuar?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={() => { fillFormForEdit(approvedWarning); setApprovedWarning(null); }}>
+              Editar mesmo assim
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold tracking-tight">Orçamentos</h1>
-        <Dialog open={open} onOpenChange={setOpen}>
+        <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) { setEditId(null); setEditQuoteNumber(null); } }}>
           <DialogTrigger asChild>
-            <Button><Plus className="h-4 w-4 mr-1" /> Novo Orçamento</Button>
+            <Button onClick={openNew}><Plus className="h-4 w-4 mr-1" /> Novo Orçamento</Button>
           </DialogTrigger>
           <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>Calculadora de Impressão 3D</DialogTitle>
+              <DialogTitle>
+                {editId ? `Editar Orçamento #${editQuoteNumber}` : "Calculadora de Impressão 3D"}
+              </DialogTitle>
             </DialogHeader>
             <form onSubmit={(e) => { e.preventDefault(); save.mutate(); }} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
@@ -348,11 +420,18 @@ export default function Quotes() {
                 )}
               </div>
 
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Margem (%)</Label>
                   <Input type="number" min={0} max={500} step={1} value={form.margin * 100} onChange={(e) => setForm({ ...form, margin: +e.target.value / 100 })} />
                 </div>
+                <div className="space-y-2">
+                  <Label>Frete (R$)</Label>
+                  <Input type="number" min={0} step={0.01} value={form.shipping_cost} onChange={(e) => setForm({ ...form, shipping_cost: +e.target.value })} />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Prazo (dias)</Label>
                   <Input type="number" min={1} value={form.delivery_days} onChange={(e) => setForm({ ...form, delivery_days: +e.target.value })} />
@@ -371,6 +450,9 @@ export default function Quotes() {
                   <div className="flex justify-between"><span>Custo Trabalho:</span><span>R$ {costs.labor_cost.toFixed(2)}</span></div>
                   {form.has_modeling && <div className="flex justify-between"><span>Custo Modelagem:</span><span>R$ {costs.modeling_cost.toFixed(2)}</span></div>}
                   <div className="flex justify-between font-medium border-t border-border pt-1"><span>Custo Total:</span><span>R$ {costs.total_cost.toFixed(2)}</span></div>
+                  {form.shipping_cost > 0 && (
+                    <div className="flex justify-between"><span>Frete:</span><span>R$ {form.shipping_cost.toFixed(2)}</span></div>
+                  )}
                   <div className="flex justify-between font-bold text-lg text-primary border-t border-border pt-1">
                     <span>Preço Final:</span><span>R$ {costs.final_price.toFixed(2)}</span>
                   </div>
@@ -378,7 +460,7 @@ export default function Quotes() {
               </Card>
 
               <Button type="submit" className="w-full" disabled={save.isPending}>
-                {save.isPending ? "Salvando..." : "Criar Orçamento"}
+                {save.isPending ? "Salvando..." : editId ? "Salvar Alterações" : "Criar Orçamento"}
               </Button>
             </form>
           </DialogContent>
@@ -395,7 +477,7 @@ export default function Quotes() {
                 <TableHead>Peça</TableHead>
                 <TableHead>Preço</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead className="w-40"></TableHead>
+                <TableHead className="w-48"></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -415,6 +497,9 @@ export default function Quotes() {
                     </TableCell>
                     <TableCell>
                       <div className="flex gap-1">
+                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(q)}>
+                          <Pencil className="h-3.5 w-3.5" />
+                        </Button>
                         {q.status === "draft" && (
                           <Button variant="ghost" size="sm" onClick={() => updateStatus.mutate({ id: q.id, status: "sent" })}>Enviar</Button>
                         )}

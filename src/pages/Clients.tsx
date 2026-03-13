@@ -5,7 +5,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
@@ -14,13 +14,14 @@ import { toast } from "sonner";
 
 interface ClientForm {
   name: string;
+  cpf: string;
   phone: string;
   email: string;
   company: string;
   notes: string;
 }
 
-const emptyForm: ClientForm = { name: "", phone: "", email: "", company: "", notes: "" };
+const emptyForm: ClientForm = { name: "", cpf: "", phone: "", email: "", company: "", notes: "" };
 
 export default function Clients() {
   const { user } = useAuth();
@@ -70,12 +71,12 @@ export default function Clients() {
     },
   });
 
-  const filtered = clients.filter((c) =>
-    `${c.name} ${c.email} ${c.company}`.toLowerCase().includes(search.toLowerCase())
+  const filtered = clients.filter((c: any) =>
+    `${c.name} ${c.email} ${c.company} ${c.cpf ?? ""}`.toLowerCase().includes(search.toLowerCase())
   );
 
   const openEdit = (c: any) => {
-    setForm({ name: c.name, phone: c.phone ?? "", email: c.email ?? "", company: c.company ?? "", notes: c.notes ?? "" });
+    setForm({ name: c.name, cpf: c.cpf ?? "", phone: c.phone ?? "", email: c.email ?? "", company: c.company ?? "", notes: c.notes ?? "" });
     setEditId(c.id);
     setOpen(true);
   };
@@ -108,17 +109,23 @@ export default function Clients() {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
+                  <Label>CPF</Label>
+                  <Input value={form.cpf} onChange={(e) => setForm({ ...form, cpf: e.target.value })} placeholder="000.000.000-00" />
+                </div>
+                <div className="space-y-2">
                   <Label>Telefone</Label>
                   <Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
                 </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Email</Label>
                   <Input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
                 </div>
-              </div>
-              <div className="space-y-2">
-                <Label>Empresa</Label>
-                <Input value={form.company} onChange={(e) => setForm({ ...form, company: e.target.value })} />
+                <div className="space-y-2">
+                  <Label>Empresa</Label>
+                  <Input value={form.company} onChange={(e) => setForm({ ...form, company: e.target.value })} />
+                </div>
               </div>
               <div className="space-y-2">
                 <Label>Observações</Label>
@@ -143,6 +150,7 @@ export default function Clients() {
             <TableHeader>
               <TableRow>
                 <TableHead>Nome</TableHead>
+                <TableHead>CPF</TableHead>
                 <TableHead>Email</TableHead>
                 <TableHead>Telefone</TableHead>
                 <TableHead>Empresa</TableHead>
@@ -152,14 +160,15 @@ export default function Clients() {
             <TableBody>
               {filtered.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
                     Nenhum cliente encontrado
                   </TableCell>
                 </TableRow>
               ) : (
-                filtered.map((c) => (
+                filtered.map((c: any) => (
                   <TableRow key={c.id}>
                     <TableCell className="font-medium">{c.name}</TableCell>
+                    <TableCell>{c.cpf}</TableCell>
                     <TableCell>{c.email}</TableCell>
                     <TableCell>{c.phone}</TableCell>
                     <TableCell>{c.company}</TableCell>

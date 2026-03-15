@@ -121,9 +121,10 @@ export default function Quotes() {
     const labor_cost = form.post_processing_hours * hourlyRate;
     const modeling_cost = form.has_modeling ? form.modeling_hours * modelingRate : 0;
     const total_cost = material_cost + machine_cost + labor_cost + modeling_cost;
-    const final_price = total_cost * (1 + form.margin) + form.shipping_cost;
+    const base_price = total_cost * (1 + form.margin);
+    const final_price = base_price - form.discount + form.shipping_cost;
 
-    return { material_cost, machine_cost, labor_cost, modeling_cost, total_cost, final_price };
+    return { material_cost, machine_cost, labor_cost, modeling_cost, total_cost, base_price, final_price };
   }, [form, selectedPrinter, selectedMaterial, profile]);
 
   const save = useMutation({

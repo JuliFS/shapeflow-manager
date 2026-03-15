@@ -204,6 +204,18 @@ export default function Quotes() {
     },
   });
 
+  const deleteQuote = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("quotes").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["quotes"] });
+      toast.success("Orçamento excluído!");
+    },
+    onError: (e: any) => toast.error(e.message),
+  });
+
   const openEdit = (q: any) => {
     if (q.status === "approved") {
       setApprovedWarning(q);

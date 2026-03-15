@@ -59,6 +59,7 @@ export default function Quotes() {
   const [editId, setEditId] = useState<string | null>(null);
   const [editQuoteNumber, setEditQuoteNumber] = useState<string | null>(null);
   const [approvedWarning, setApprovedWarning] = useState<any>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [form, setForm] = useState({ ...emptyForm });
 
   const { data: clients = [] } = useQuery({

@@ -578,6 +578,9 @@ export default function Quotes() {
                             <span><Upload className="h-3.5 w-3.5" /></span>
                           </Button>
                         </label>
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => setDeleteConfirm(q.id)}>
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
                       </div>
                     </TableCell>
                   </TableRow>

@@ -49,6 +49,7 @@ const emptyForm = {
   delivery_days: 7,
   payment_method: "",
   shipping_cost: 0,
+  discount: 0,
 };
 
 export default function Quotes() {

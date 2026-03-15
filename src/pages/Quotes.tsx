@@ -225,7 +225,8 @@ export default function Quotes() {
       margin: q.margin ?? 0.3,
       delivery_days: q.delivery_days ?? 7,
       payment_method: q.payment_method ?? "",
-      shipping_cost: (q as any).shipping_cost ?? 0,
+      shipping_cost: q.shipping_cost ?? 0,
+      discount: (q as any).discount ?? 0,
     });
     setEditId(q.id);
     setEditQuoteNumber(q.quote_number);

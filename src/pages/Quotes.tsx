@@ -245,6 +245,7 @@ export default function Quotes() {
     const doc = new jsPDF();
     const pw = doc.internal.pageSize.getWidth();
 
+    // Logo / Company name
     doc.setFontSize(20);
     doc.setFont("helvetica", "bold");
     doc.text(profile?.company_name || "3D Manager", pw / 2, 25, { align: "center" });
@@ -268,14 +269,33 @@ export default function Quotes() {
     y += 8;
     doc.text(`Material: ${quote.material_name || "—"}`, 20, y);
 
-    const shippingCost = (quote as any).shipping_cost ?? 0;
+    // Financial summary (commercial only)
+    const shippingCost = quote.shipping_cost ?? 0;
+    const discount = (quote as any).discount ?? 0;
+    const basePrice = (quote.final_price ?? 0) + discount - shippingCost;
 
-    y += 25;
+    y += 20;
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "normal");
+    doc.text("Resumo Financeiro", 20, y);
+    y += 8;
+    doc.text(`Valor da peça: R$ ${basePrice.toFixed(2)}`, 30, y);
+    if (discount > 0) {
+      y += 7;
+      doc.text(`Desconto: - R$ ${discount.toFixed(2)}`, 30, y);
+    }
+    if (shippingCost > 0) {
+      y += 7;
+      doc.text(`Frete: + R$ ${shippingCost.toFixed(2)}`, 30, y);
+    }
+
+    // TOTAL highlight
+    y += 15;
     doc.setFillColor(37, 99, 235);
     doc.roundedRect(30, y - 8, pw - 60, 30, 4, 4, "F");
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(12);
-    doc.text("PREÇO FINAL", pw / 2, y + 2, { align: "center" });
+    doc.text("TOTAL", pw / 2, y + 2, { align: "center" });
     doc.setFontSize(22);
     doc.setFont("helvetica", "bold");
     doc.text(`R$ ${(quote.final_price ?? 0).toFixed(2)}`, pw / 2, y + 16, { align: "center" });
@@ -283,12 +303,8 @@ export default function Quotes() {
     doc.setTextColor(0, 0, 0);
     doc.setFont("helvetica", "normal");
 
-    y += 45;
+    y += 40;
     doc.setFontSize(10);
-    if (shippingCost > 0) {
-      doc.text(`Frete: R$ ${shippingCost.toFixed(2)}`, 20, y);
-      y += 8;
-    }
     doc.text(`Prazo de entrega: ${quote.delivery_days ?? "—"} dias`, 20, y);
     y += 8;
     doc.text(`Forma de pagamento: ${quote.payment_method || "A combinar"}`, 20, y);

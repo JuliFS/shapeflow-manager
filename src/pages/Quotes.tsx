@@ -370,6 +370,24 @@ export default function Quotes() {
         </AlertDialogContent>
       </AlertDialog>
 
+      {/* Delete confirmation */}
+      <AlertDialog open={!!deleteConfirm} onOpenChange={() => setDeleteConfirm(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir Orçamento</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja excluir este orçamento? Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={() => { if (deleteConfirm) deleteQuote.mutate(deleteConfirm); setDeleteConfirm(null); }}>
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold tracking-tight">Orçamentos</h1>
         <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) { setEditId(null); setEditQuoteNumber(null); } }}>

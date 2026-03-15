@@ -430,6 +430,13 @@ export default function Quotes() {
                   <Input type="number" min={0} max={500} step={1} value={form.margin * 100} onChange={(e) => setForm({ ...form, margin: +e.target.value / 100 })} />
                 </div>
                 <div className="space-y-2">
+                  <Label>Desconto (R$)</Label>
+                  <Input type="number" min={0} step={0.01} value={form.discount} onChange={(e) => setForm({ ...form, discount: +e.target.value })} />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
                   <Label>Frete (R$)</Label>
                   <Input type="number" min={0} step={0.01} value={form.shipping_cost} onChange={(e) => setForm({ ...form, shipping_cost: +e.target.value })} />
                 </div>

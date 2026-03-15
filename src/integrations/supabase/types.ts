@@ -407,6 +407,7 @@ export type Database = {
           client_name: string | null
           created_at: string
           delivery_days: number | null
+          discount: number | null
           final_price: number | null
           finishing: string | null
           has_modeling: boolean | null
@@ -439,6 +440,7 @@ export type Database = {
           client_name?: string | null
           created_at?: string
           delivery_days?: number | null
+          discount?: number | null
           final_price?: number | null
           finishing?: string | null
           has_modeling?: boolean | null
@@ -471,6 +473,7 @@ export type Database = {
           client_name?: string | null
           created_at?: string
           delivery_days?: number | null
+          discount?: number | null
           final_price?: number | null
           finishing?: string | null
           has_modeling?: boolean | null

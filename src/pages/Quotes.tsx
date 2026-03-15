@@ -49,6 +49,7 @@ const emptyForm = {
   delivery_days: 7,
   payment_method: "",
   shipping_cost: 0,
+  discount: 0,
 };
 
 export default function Quotes() {
@@ -120,9 +121,10 @@ export default function Quotes() {
     const labor_cost = form.post_processing_hours * hourlyRate;
     const modeling_cost = form.has_modeling ? form.modeling_hours * modelingRate : 0;
     const total_cost = material_cost + machine_cost + labor_cost + modeling_cost;
-    const final_price = total_cost * (1 + form.margin) + form.shipping_cost;
+    const base_price = total_cost * (1 + form.margin);
+    const final_price = base_price - form.discount + form.shipping_cost;
 
-    return { material_cost, machine_cost, labor_cost, modeling_cost, total_cost, final_price };
+    return { material_cost, machine_cost, labor_cost, modeling_cost, total_cost, base_price, final_price };
   }, [form, selectedPrinter, selectedMaterial, profile]);
 
   const save = useMutation({
@@ -145,6 +147,7 @@ export default function Quotes() {
         delivery_days: form.delivery_days,
         payment_method: form.payment_method,
         shipping_cost: form.shipping_cost,
+        discount: form.discount,
         ...costs,
       };
 
@@ -223,7 +226,8 @@ export default function Quotes() {
       margin: q.margin ?? 0.3,
       delivery_days: q.delivery_days ?? 7,
       payment_method: q.payment_method ?? "",
-      shipping_cost: (q as any).shipping_cost ?? 0,
+      shipping_cost: q.shipping_cost ?? 0,
+      discount: (q as any).discount ?? 0,
     });
     setEditId(q.id);
     setEditQuoteNumber(q.quote_number);
@@ -241,6 +245,7 @@ export default function Quotes() {
     const doc = new jsPDF();
     const pw = doc.internal.pageSize.getWidth();
 
+    // Logo / Company name
     doc.setFontSize(20);
     doc.setFont("helvetica", "bold");
     doc.text(profile?.company_name || "3D Manager", pw / 2, 25, { align: "center" });
@@ -264,14 +269,33 @@ export default function Quotes() {
     y += 8;
     doc.text(`Material: ${quote.material_name || "—"}`, 20, y);
 
-    const shippingCost = (quote as any).shipping_cost ?? 0;
+    // Financial summary (commercial only)
+    const shippingCost = quote.shipping_cost ?? 0;
+    const discount = (quote as any).discount ?? 0;
+    const basePrice = (quote.final_price ?? 0) + discount - shippingCost;
 
-    y += 25;
+    y += 20;
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "normal");
+    doc.text("Resumo Financeiro", 20, y);
+    y += 8;
+    doc.text(`Valor da peça: R$ ${basePrice.toFixed(2)}`, 30, y);
+    if (discount > 0) {
+      y += 7;
+      doc.text(`Desconto: - R$ ${discount.toFixed(2)}`, 30, y);
+    }
+    if (shippingCost > 0) {
+      y += 7;
+      doc.text(`Frete: + R$ ${shippingCost.toFixed(2)}`, 30, y);
+    }
+
+    // TOTAL highlight
+    y += 15;
     doc.setFillColor(37, 99, 235);
     doc.roundedRect(30, y - 8, pw - 60, 30, 4, 4, "F");
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(12);
-    doc.text("PREÇO FINAL", pw / 2, y + 2, { align: "center" });
+    doc.text("TOTAL", pw / 2, y + 2, { align: "center" });
     doc.setFontSize(22);
     doc.setFont("helvetica", "bold");
     doc.text(`R$ ${(quote.final_price ?? 0).toFixed(2)}`, pw / 2, y + 16, { align: "center" });
@@ -279,12 +303,8 @@ export default function Quotes() {
     doc.setTextColor(0, 0, 0);
     doc.setFont("helvetica", "normal");
 
-    y += 45;
+    y += 40;
     doc.setFontSize(10);
-    if (shippingCost > 0) {
-      doc.text(`Frete: R$ ${shippingCost.toFixed(2)}`, 20, y);
-      y += 8;
-    }
     doc.text(`Prazo de entrega: ${quote.delivery_days ?? "—"} dias`, 20, y);
     y += 8;
     doc.text(`Forma de pagamento: ${quote.payment_method || "A combinar"}`, 20, y);
@@ -426,6 +446,13 @@ export default function Quotes() {
                   <Input type="number" min={0} max={500} step={1} value={form.margin * 100} onChange={(e) => setForm({ ...form, margin: +e.target.value / 100 })} />
                 </div>
                 <div className="space-y-2">
+                  <Label>Desconto (R$)</Label>
+                  <Input type="number" min={0} step={0.01} value={form.discount} onChange={(e) => setForm({ ...form, discount: +e.target.value })} />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
                   <Label>Frete (R$)</Label>
                   <Input type="number" min={0} step={0.01} value={form.shipping_cost} onChange={(e) => setForm({ ...form, shipping_cost: +e.target.value })} />
                 </div>
@@ -442,17 +469,19 @@ export default function Quotes() {
                 </div>
               </div>
 
-              {/* Cost breakdown */}
-              <Card className="bg-muted/50">
+              {/* Detalhamento de Custos (interno) */}
+              <Card className="bg-muted/50 border-dashed">
                 <CardContent className="pt-4 space-y-1 text-sm">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Detalhamento de Custos (interno)</p>
                   <div className="flex justify-between"><span>Custo Material:</span><span>R$ {costs.material_cost.toFixed(2)}</span></div>
                   <div className="flex justify-between"><span>Custo Máquina:</span><span>R$ {costs.machine_cost.toFixed(2)}</span></div>
                   <div className="flex justify-between"><span>Custo Trabalho:</span><span>R$ {costs.labor_cost.toFixed(2)}</span></div>
                   {form.has_modeling && <div className="flex justify-between"><span>Custo Modelagem:</span><span>R$ {costs.modeling_cost.toFixed(2)}</span></div>}
                   <div className="flex justify-between font-medium border-t border-border pt-1"><span>Custo Total:</span><span>R$ {costs.total_cost.toFixed(2)}</span></div>
-                  {form.shipping_cost > 0 && (
-                    <div className="flex justify-between"><span>Frete:</span><span>R$ {form.shipping_cost.toFixed(2)}</span></div>
-                  )}
+                  <div className="flex justify-between"><span>Margem ({(form.margin * 100).toFixed(0)}%):</span><span>R$ {(costs.base_price - costs.total_cost).toFixed(2)}</span></div>
+                  <div className="flex justify-between"><span>Preço Base:</span><span>R$ {costs.base_price.toFixed(2)}</span></div>
+                  {form.discount > 0 && <div className="flex justify-between text-green-600"><span>Desconto:</span><span>- R$ {form.discount.toFixed(2)}</span></div>}
+                  {form.shipping_cost > 0 && <div className="flex justify-between"><span>Frete:</span><span>+ R$ {form.shipping_cost.toFixed(2)}</span></div>}
                   <div className="flex justify-between font-bold text-lg text-primary border-t border-border pt-1">
                     <span>Preço Final:</span><span>R$ {costs.final_price.toFixed(2)}</span>
                   </div>

@@ -453,17 +453,19 @@ export default function Quotes() {
                 </div>
               </div>
 
-              {/* Cost breakdown */}
-              <Card className="bg-muted/50">
+              {/* Detalhamento de Custos (interno) */}
+              <Card className="bg-muted/50 border-dashed">
                 <CardContent className="pt-4 space-y-1 text-sm">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Detalhamento de Custos (interno)</p>
                   <div className="flex justify-between"><span>Custo Material:</span><span>R$ {costs.material_cost.toFixed(2)}</span></div>
                   <div className="flex justify-between"><span>Custo Máquina:</span><span>R$ {costs.machine_cost.toFixed(2)}</span></div>
                   <div className="flex justify-between"><span>Custo Trabalho:</span><span>R$ {costs.labor_cost.toFixed(2)}</span></div>
                   {form.has_modeling && <div className="flex justify-between"><span>Custo Modelagem:</span><span>R$ {costs.modeling_cost.toFixed(2)}</span></div>}
                   <div className="flex justify-between font-medium border-t border-border pt-1"><span>Custo Total:</span><span>R$ {costs.total_cost.toFixed(2)}</span></div>
-                  {form.shipping_cost > 0 && (
-                    <div className="flex justify-between"><span>Frete:</span><span>R$ {form.shipping_cost.toFixed(2)}</span></div>
-                  )}
+                  <div className="flex justify-between"><span>Margem ({(form.margin * 100).toFixed(0)}%):</span><span>R$ {(costs.base_price - costs.total_cost).toFixed(2)}</span></div>
+                  <div className="flex justify-between"><span>Preço Base:</span><span>R$ {costs.base_price.toFixed(2)}</span></div>
+                  {form.discount > 0 && <div className="flex justify-between text-green-600"><span>Desconto:</span><span>- R$ {form.discount.toFixed(2)}</span></div>}
+                  {form.shipping_cost > 0 && <div className="flex justify-between"><span>Frete:</span><span>+ R$ {form.shipping_cost.toFixed(2)}</span></div>}
                   <div className="flex justify-between font-bold text-lg text-primary border-t border-border pt-1">
                     <span>Preço Final:</span><span>R$ {costs.final_price.toFixed(2)}</span>
                   </div>

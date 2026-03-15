@@ -403,6 +403,7 @@ export type Database = {
       }
       quotes: {
         Row: {
+          base_price: number | null
           client_id: string | null
           client_name: string | null
           created_at: string
@@ -436,6 +437,7 @@ export type Database = {
           weight_grams: number
         }
         Insert: {
+          base_price?: number | null
           client_id?: string | null
           client_name?: string | null
           created_at?: string
@@ -469,6 +471,7 @@ export type Database = {
           weight_grams?: number
         }
         Update: {
+          base_price?: number | null
           client_id?: string | null
           client_name?: string | null
           created_at?: string

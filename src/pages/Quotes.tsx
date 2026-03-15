@@ -147,6 +147,7 @@ export default function Quotes() {
         delivery_days: form.delivery_days,
         payment_method: form.payment_method,
         shipping_cost: form.shipping_cost,
+        discount: form.discount,
         ...costs,
       };
 

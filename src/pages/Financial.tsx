@@ -1,14 +1,14 @@
 import { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
+import { useCompany } from "@/contexts/CompanyContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
@@ -16,25 +16,25 @@ import { Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 
-// ===== RECEITAS TAB =====
 function ReceitasTab() {
   const { user } = useAuth();
+  const { currentCompanyId } = useCompany();
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ amount: 0, date: format(new Date(), "yyyy-MM-dd"), category: "", description: "" });
 
   const { data: records = [] } = useQuery({
-    queryKey: ["financials-income", user?.id],
+    queryKey: ["financials-income", currentCompanyId],
     queryFn: async () => {
-      const { data } = await supabase.from("financial_records").select("*").eq("user_id", user!.id).eq("type", "income").order("date", { ascending: false });
+      const { data } = await supabase.from("financial_records").select("*").eq("company_id", currentCompanyId!).eq("type", "income").order("date", { ascending: false });
       return data ?? [];
     },
-    enabled: !!user,
+    enabled: !!currentCompanyId,
   });
 
   const save = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase.from("financial_records").insert({ user_id: user!.id, type: "income", ...form });
+      const { error } = await supabase.from("financial_records").insert({ user_id: user!.id, company_id: currentCompanyId!, type: "income", ...form });
       if (error) throw error;
     },
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["financials-income"] }); qc.invalidateQueries({ queryKey: ["financials"] }); setOpen(false); toast.success("Receita adicionada!"); },
@@ -84,37 +84,37 @@ function ReceitasTab() {
   );
 }
 
-// ===== DESPESAS FIXAS TAB =====
 function DespesasFixasTab() {
   const { user } = useAuth();
+  const { currentCompanyId } = useCompany();
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ name: "", category: "", monthly_amount: 0, due_day: 1, active: true });
 
   const { data: records = [] } = useQuery({
-    queryKey: ["fixed_expenses", user?.id],
+    queryKey: ["fixed_expenses", currentCompanyId],
     queryFn: async () => {
-      const { data } = await supabase.from("fixed_expenses" as any).select("*").eq("user_id", user!.id).order("created_at", { ascending: false });
+      const { data } = await supabase.from("fixed_expenses").select("*").eq("company_id", currentCompanyId!).order("created_at", { ascending: false });
       return (data as any[]) ?? [];
     },
-    enabled: !!user,
+    enabled: !!currentCompanyId,
   });
 
   const save = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase.from("fixed_expenses" as any).insert({ user_id: user!.id, ...form } as any);
+      const { error } = await supabase.from("fixed_expenses").insert({ user_id: user!.id, company_id: currentCompanyId!, ...form } as any);
       if (error) throw error;
     },
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["fixed_expenses"] }); setOpen(false); toast.success("Despesa fixa adicionada!"); },
   });
 
   const remove = useMutation({
-    mutationFn: async (id: string) => { const { error } = await supabase.from("fixed_expenses" as any).delete().eq("id", id); if (error) throw error; },
+    mutationFn: async (id: string) => { const { error } = await supabase.from("fixed_expenses").delete().eq("id", id); if (error) throw error; },
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["fixed_expenses"] }); toast.success("Removido!"); },
   });
 
   const toggleActive = async (id: string, active: boolean) => {
-    await supabase.from("fixed_expenses" as any).update({ active } as any).eq("id", id);
+    await supabase.from("fixed_expenses").update({ active } as any).eq("id", id);
     qc.invalidateQueries({ queryKey: ["fixed_expenses"] });
   };
 
@@ -132,10 +132,7 @@ function DespesasFixasTab() {
                 <div className="space-y-2"><Label>Valor Mensal (R$)</Label><Input type="number" min={0} step={0.01} value={form.monthly_amount} onChange={(e) => setForm({ ...form, monthly_amount: +e.target.value })} required /></div>
                 <div className="space-y-2"><Label>Dia de Vencimento</Label><Input type="number" min={1} max={31} value={form.due_day} onChange={(e) => setForm({ ...form, due_day: +e.target.value })} /></div>
               </div>
-              <div className="flex items-center gap-2">
-                <Switch checked={form.active} onCheckedChange={(v) => setForm({ ...form, active: v })} />
-                <Label>Ativo</Label>
-              </div>
+              <div className="flex items-center gap-2"><Switch checked={form.active} onCheckedChange={(v) => setForm({ ...form, active: v })} /><Label>Ativo</Label></div>
               <Button type="submit" className="w-full" disabled={save.isPending}>Salvar</Button>
             </form>
           </DialogContent>
@@ -166,32 +163,32 @@ function DespesasFixasTab() {
   );
 }
 
-// ===== DESPESAS VARIÁVEIS TAB =====
 function DespesasVariaveisTab() {
   const { user } = useAuth();
+  const { currentCompanyId } = useCompany();
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ name: "", category: "", amount: 0, date: format(new Date(), "yyyy-MM-dd"), notes: "" });
 
   const { data: records = [] } = useQuery({
-    queryKey: ["variable_expenses", user?.id],
+    queryKey: ["variable_expenses", currentCompanyId],
     queryFn: async () => {
-      const { data } = await supabase.from("variable_expenses" as any).select("*").eq("user_id", user!.id).order("date", { ascending: false });
+      const { data } = await supabase.from("variable_expenses").select("*").eq("company_id", currentCompanyId!).order("date", { ascending: false });
       return (data as any[]) ?? [];
     },
-    enabled: !!user,
+    enabled: !!currentCompanyId,
   });
 
   const save = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase.from("variable_expenses" as any).insert({ user_id: user!.id, ...form } as any);
+      const { error } = await supabase.from("variable_expenses").insert({ user_id: user!.id, company_id: currentCompanyId!, ...form } as any);
       if (error) throw error;
     },
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["variable_expenses"] }); setOpen(false); toast.success("Despesa variável adicionada!"); },
   });
 
   const remove = useMutation({
-    mutationFn: async (id: string) => { const { error } = await supabase.from("variable_expenses" as any).delete().eq("id", id); if (error) throw error; },
+    mutationFn: async (id: string) => { const { error } = await supabase.from("variable_expenses").delete().eq("id", id); if (error) throw error; },
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["variable_expenses"] }); toast.success("Removido!"); },
   });
 
@@ -236,32 +233,32 @@ function DespesasVariaveisTab() {
   );
 }
 
-// ===== PRÓ-LABORE TAB =====
 function ProLaboreTab() {
   const { user } = useAuth();
+  const { currentCompanyId } = useCompany();
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ amount: 0, date: format(new Date(), "yyyy-MM-dd"), notes: "" });
 
   const { data: records = [] } = useQuery({
-    queryKey: ["pro_labore", user?.id],
+    queryKey: ["pro_labore", currentCompanyId],
     queryFn: async () => {
-      const { data } = await supabase.from("pro_labore" as any).select("*").eq("user_id", user!.id).order("date", { ascending: false });
+      const { data } = await supabase.from("pro_labore").select("*").eq("company_id", currentCompanyId!).order("date", { ascending: false });
       return (data as any[]) ?? [];
     },
-    enabled: !!user,
+    enabled: !!currentCompanyId,
   });
 
   const save = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase.from("pro_labore" as any).insert({ user_id: user!.id, ...form } as any);
+      const { error } = await supabase.from("pro_labore").insert({ user_id: user!.id, company_id: currentCompanyId!, ...form } as any);
       if (error) throw error;
     },
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["pro_labore"] }); setOpen(false); toast.success("Pró-labore adicionado!"); },
   });
 
   const remove = useMutation({
-    mutationFn: async (id: string) => { const { error } = await supabase.from("pro_labore" as any).delete().eq("id", id); if (error) throw error; },
+    mutationFn: async (id: string) => { const { error } = await supabase.from("pro_labore").delete().eq("id", id); if (error) throw error; },
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["pro_labore"] }); toast.success("Removido!"); },
   });
 
@@ -302,32 +299,32 @@ function ProLaboreTab() {
   );
 }
 
-// ===== DISTRIBUIÇÃO DE LUCROS TAB =====
 function DistribuicaoLucrosTab() {
   const { user } = useAuth();
+  const { currentCompanyId } = useCompany();
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ amount: 0, date: format(new Date(), "yyyy-MM-dd"), notes: "" });
 
   const { data: records = [] } = useQuery({
-    queryKey: ["profit_distribution", user?.id],
+    queryKey: ["profit_distribution", currentCompanyId],
     queryFn: async () => {
-      const { data } = await supabase.from("profit_distribution" as any).select("*").eq("user_id", user!.id).order("date", { ascending: false });
+      const { data } = await supabase.from("profit_distribution").select("*").eq("company_id", currentCompanyId!).order("date", { ascending: false });
       return (data as any[]) ?? [];
     },
-    enabled: !!user,
+    enabled: !!currentCompanyId,
   });
 
   const save = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase.from("profit_distribution" as any).insert({ user_id: user!.id, ...form } as any);
+      const { error } = await supabase.from("profit_distribution").insert({ user_id: user!.id, company_id: currentCompanyId!, ...form } as any);
       if (error) throw error;
     },
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["profit_distribution"] }); setOpen(false); toast.success("Distribuição adicionada!"); },
   });
 
   const remove = useMutation({
-    mutationFn: async (id: string) => { const { error } = await supabase.from("profit_distribution" as any).delete().eq("id", id); if (error) throw error; },
+    mutationFn: async (id: string) => { const { error } = await supabase.from("profit_distribution").delete().eq("id", id); if (error) throw error; },
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["profit_distribution"] }); toast.success("Removido!"); },
   });
 
@@ -368,12 +365,10 @@ function DistribuicaoLucrosTab() {
   );
 }
 
-// ===== MAIN FINANCIAL PAGE =====
 export default function Financial() {
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold tracking-tight">Financeiro</h1>
-
       <Tabs defaultValue="receitas">
         <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="receitas">Receitas</TabsTrigger>
@@ -382,7 +377,6 @@ export default function Financial() {
           <TabsTrigger value="prolabore">Pró-labore</TabsTrigger>
           <TabsTrigger value="lucros">Dist. Lucros</TabsTrigger>
         </TabsList>
-
         <TabsContent value="receitas" className="mt-4"><ReceitasTab /></TabsContent>
         <TabsContent value="fixas" className="mt-4"><DespesasFixasTab /></TabsContent>
         <TabsContent value="variaveis" className="mt-4"><DespesasVariaveisTab /></TabsContent>

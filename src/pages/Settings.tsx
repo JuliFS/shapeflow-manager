@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
+import { useCompany } from "@/contexts/CompanyContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -8,13 +9,15 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Badge } from "@/components/ui/badge";
 import { Plus, Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
-// ===== PRINTERS TAB =====
 function PrintersTab() {
   const { user } = useAuth();
+  const { currentCompanyId } = useCompany();
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
@@ -24,54 +27,39 @@ function PrintersTab() {
   });
 
   const { data: printers = [] } = useQuery({
-    queryKey: ["printers", user?.id],
+    queryKey: ["printers", currentCompanyId],
     queryFn: async () => {
-      const { data } = await supabase.from("printers").select("*").eq("user_id", user!.id).order("created_at", { ascending: false });
+      const { data } = await supabase.from("printers").select("*").eq("company_id", currentCompanyId!).order("created_at", { ascending: false });
       return data ?? [];
     },
-    enabled: !!user,
+    enabled: !!currentCompanyId,
   });
 
   const save = useMutation({
     mutationFn: async () => {
-      const payload = { ...form, user_id: user!.id };
       if (editId) {
-        const { user_id, ...updatePayload } = payload;
-        const { error } = await supabase.from("printers").update(updatePayload).eq("id", editId);
+        const { error } = await supabase.from("printers").update(form).eq("id", editId);
         if (error) throw error;
       } else {
-        const { error } = await supabase.from("printers").insert(payload);
+        const { error } = await supabase.from("printers").insert({ ...form, user_id: user!.id, company_id: currentCompanyId! });
         if (error) throw error;
       }
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["printers"] });
-      setOpen(false);
-      setEditId(null);
-      toast.success("Impressora salva!");
-    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["printers"] }); setOpen(false); setEditId(null); toast.success("Impressora salva!"); },
     onError: (e: any) => toast.error(e.message),
   });
 
   const remove = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase.from("printers").delete().eq("id", id);
-      if (error) throw error;
-    },
+    mutationFn: async (id: string) => { const { error } = await supabase.from("printers").delete().eq("id", id); if (error) throw error; },
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["printers"] }); toast.success("Removida!"); },
   });
 
   const openEdit = (p: any) => {
-    setForm({
-      name: p.name, purchase_cost: p.purchase_cost, lifespan_hours: p.lifespan_hours,
-      power_consumption_watts: p.power_consumption_watts, energy_cost_per_kwh: p.energy_cost_per_kwh,
-      maintenance_cost_per_hour: p.maintenance_cost_per_hour,
-    });
+    setForm({ name: p.name, purchase_cost: p.purchase_cost, lifespan_hours: p.lifespan_hours, power_consumption_watts: p.power_consumption_watts, energy_cost_per_kwh: p.energy_cost_per_kwh, maintenance_cost_per_hour: p.maintenance_cost_per_hour });
     setEditId(p.id);
     setOpen(true);
   };
 
-  // Calculate cost preview
   const costPerHour = (form.purchase_cost / Math.max(form.lifespan_hours, 1)) + ((form.power_consumption_watts / 1000) * form.energy_cost_per_kwh) + form.maintenance_cost_per_hour;
 
   return (
@@ -86,10 +74,7 @@ function PrintersTab() {
           <DialogContent>
             <DialogHeader><DialogTitle>{editId ? "Editar" : "Nova"} Impressora</DialogTitle></DialogHeader>
             <form onSubmit={(e) => { e.preventDefault(); save.mutate(); }} className="space-y-4">
-              <div className="space-y-2">
-                <Label>Nome *</Label>
-                <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
-              </div>
+              <div className="space-y-2"><Label>Nome *</Label><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required /></div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2"><Label>Custo da Impressora (R$)</Label><Input type="number" min={0} step={0.01} value={form.purchase_cost} onChange={(e) => setForm({ ...form, purchase_cost: +e.target.value })} /></div>
                 <div className="space-y-2"><Label>Vida Útil (horas)</Label><Input type="number" min={1} value={form.lifespan_hours} onChange={(e) => setForm({ ...form, lifespan_hours: +e.target.value })} /></div>
@@ -113,15 +98,7 @@ function PrintersTab() {
       <Card>
         <CardContent className="p-0">
           <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Nome</TableHead>
-                <TableHead>Custo Aquisição</TableHead>
-                <TableHead>Vida Útil</TableHead>
-                <TableHead>Custo/Hora</TableHead>
-                <TableHead className="w-24"></TableHead>
-              </TableRow>
-            </TableHeader>
+            <TableHeader><TableRow><TableHead>Nome</TableHead><TableHead>Custo Aquisição</TableHead><TableHead>Vida Útil</TableHead><TableHead>Custo/Hora</TableHead><TableHead className="w-24"></TableHead></TableRow></TableHeader>
             <TableBody>
               {printers.length === 0 ? (
                 <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-8">Nenhuma impressora</TableCell></TableRow>
@@ -147,21 +124,21 @@ function PrintersTab() {
   );
 }
 
-// ===== MATERIALS TAB =====
 function MaterialsTab() {
   const { user } = useAuth();
+  const { currentCompanyId } = useCompany();
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [form, setForm] = useState({ name: "", color: "", brand: "", cost_per_kg: 0, density: 1.24 });
 
   const { data: materials = [] } = useQuery({
-    queryKey: ["materials", user?.id],
+    queryKey: ["materials", currentCompanyId],
     queryFn: async () => {
-      const { data } = await supabase.from("materials").select("*").eq("user_id", user!.id).order("created_at", { ascending: false });
+      const { data } = await supabase.from("materials").select("*").eq("company_id", currentCompanyId!).order("created_at", { ascending: false });
       return data ?? [];
     },
-    enabled: !!user,
+    enabled: !!currentCompanyId,
   });
 
   const save = useMutation({
@@ -170,7 +147,7 @@ function MaterialsTab() {
         const { error } = await supabase.from("materials").update(form).eq("id", editId);
         if (error) throw error;
       } else {
-        const { error } = await supabase.from("materials").insert({ ...form, user_id: user!.id });
+        const { error } = await supabase.from("materials").insert({ ...form, user_id: user!.id, company_id: currentCompanyId! });
         if (error) throw error;
       }
     },
@@ -179,10 +156,7 @@ function MaterialsTab() {
   });
 
   const remove = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase.from("materials").delete().eq("id", id);
-      if (error) throw error;
-    },
+    mutationFn: async (id: string) => { const { error } = await supabase.from("materials").delete().eq("id", id); if (error) throw error; },
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["materials"] }); toast.success("Removido!"); },
   });
 
@@ -215,16 +189,7 @@ function MaterialsTab() {
       <Card>
         <CardContent className="p-0">
           <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Material</TableHead>
-                <TableHead>Cor</TableHead>
-                <TableHead>Marca</TableHead>
-                <TableHead>Custo/kg</TableHead>
-                <TableHead>Densidade</TableHead>
-                <TableHead className="w-24"></TableHead>
-              </TableRow>
-            </TableHeader>
+            <TableHeader><TableRow><TableHead>Material</TableHead><TableHead>Cor</TableHead><TableHead>Marca</TableHead><TableHead>Custo/kg</TableHead><TableHead>Densidade</TableHead><TableHead className="w-24"></TableHead></TableRow></TableHeader>
             <TableBody>
               {materials.length === 0 ? (
                 <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">Nenhum material</TableCell></TableRow>
@@ -255,35 +220,32 @@ function MaterialsTab() {
   );
 }
 
-// ===== SOFTWARE TAB =====
 function SoftwareTab() {
   const { user } = useAuth();
+  const { currentCompanyId } = useCompany();
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ name: "", monthly_cost: 0, category: "" });
 
   const { data: sw = [] } = useQuery({
-    queryKey: ["software", user?.id],
+    queryKey: ["software", currentCompanyId],
     queryFn: async () => {
-      const { data } = await supabase.from("software").select("*").eq("user_id", user!.id).order("created_at", { ascending: false });
+      const { data } = await supabase.from("software").select("*").eq("company_id", currentCompanyId!).order("created_at", { ascending: false });
       return data ?? [];
     },
-    enabled: !!user,
+    enabled: !!currentCompanyId,
   });
 
   const save = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase.from("software").insert({ ...form, user_id: user!.id });
+      const { error } = await supabase.from("software").insert({ ...form, user_id: user!.id, company_id: currentCompanyId! });
       if (error) throw error;
     },
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["software"] }); setOpen(false); toast.success("Software salvo!"); },
   });
 
   const remove = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase.from("software").delete().eq("id", id);
-      if (error) throw error;
-    },
+    mutationFn: async (id: string) => { const { error } = await supabase.from("software").delete().eq("id", id); if (error) throw error; },
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["software"] }); toast.success("Removido!"); },
   });
 
@@ -312,14 +274,7 @@ function SoftwareTab() {
       <Card>
         <CardContent className="p-0">
           <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Nome</TableHead>
-                <TableHead>Categoria</TableHead>
-                <TableHead>Custo Mensal</TableHead>
-                <TableHead className="w-12"></TableHead>
-              </TableRow>
-            </TableHeader>
+            <TableHeader><TableRow><TableHead>Nome</TableHead><TableHead>Categoria</TableHead><TableHead>Custo Mensal</TableHead><TableHead className="w-12"></TableHead></TableRow></TableHeader>
             <TableBody>
               {sw.length === 0 ? (
                 <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground py-8">Nenhum software</TableCell></TableRow>
@@ -343,18 +298,18 @@ function SoftwareTab() {
   );
 }
 
-// ===== PROFILE TAB =====
 function ProfileTab() {
   const { user } = useAuth();
+  const { currentCompanyId } = useCompany();
   const qc = useQueryClient();
 
   const { data: profile } = useQuery({
-    queryKey: ["profile", user?.id],
+    queryKey: ["profile", currentCompanyId],
     queryFn: async () => {
-      const { data } = await supabase.from("profiles").select("*").eq("user_id", user!.id).single();
+      const { data } = await supabase.from("profiles").select("*").eq("company_id", currentCompanyId!).single();
       return data;
     },
-    enabled: !!user,
+    enabled: !!currentCompanyId,
   });
 
   const [form, setForm] = useState({
@@ -418,7 +373,42 @@ function ProfileTab() {
   );
 }
 
-// ===== SETTINGS PAGE =====
+function CompanyPlanTab() {
+  const { currentCompany } = useCompany();
+
+  const plans = [
+    { id: "free", name: "Free", desc: "Até 10 orçamentos/mês", features: ["10 orçamentos/mês", "Gestão básica", "1 usuário"] },
+    { id: "pro", name: "Pro", desc: "Orçamentos ilimitados", features: ["Orçamentos ilimitados", "Multi-empresa", "Usuários ilimitados"] },
+    { id: "studio", name: "Studio", desc: "Relatórios avançados", features: ["Tudo do Pro", "Relatórios avançados", "Exportação PDF", "Suporte prioritário"] },
+  ];
+
+  return (
+    <div className="grid gap-4 md:grid-cols-3">
+      {plans.map((plan) => (
+        <Card key={plan.id} className={currentCompany?.plan === plan.id ? "border-primary ring-2 ring-primary/20" : ""}>
+          <CardHeader>
+            <CardTitle className="flex items-center justify-between">
+              {plan.name}
+              {currentCompany?.plan === plan.id && <Badge className="bg-primary text-primary-foreground">Atual</Badge>}
+            </CardTitle>
+            <p className="text-sm text-muted-foreground">{plan.desc}</p>
+          </CardHeader>
+          <CardContent>
+            <ul className="space-y-2 text-sm">
+              {plan.features.map((f) => (
+                <li key={f} className="flex items-center gap-2">
+                  <span className="h-1.5 w-1.5 rounded-full bg-primary" />
+                  {f}
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      ))}
+    </div>
+  );
+}
+
 export default function SettingsPage() {
   return (
     <div className="space-y-6">
@@ -429,11 +419,13 @@ export default function SettingsPage() {
           <TabsTrigger value="printers">Impressoras</TabsTrigger>
           <TabsTrigger value="materials">Materiais</TabsTrigger>
           <TabsTrigger value="software">Softwares</TabsTrigger>
+          <TabsTrigger value="plan">Plano</TabsTrigger>
         </TabsList>
         <TabsContent value="profile" className="mt-4"><ProfileTab /></TabsContent>
         <TabsContent value="printers" className="mt-4"><PrintersTab /></TabsContent>
         <TabsContent value="materials" className="mt-4"><MaterialsTab /></TabsContent>
         <TabsContent value="software" className="mt-4"><SoftwareTab /></TabsContent>
+        <TabsContent value="plan" className="mt-4"><CompanyPlanTab /></TabsContent>
       </Tabs>
     </div>
   );

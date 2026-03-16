@@ -7,6 +7,8 @@ import {
   Boxes,
   Settings,
   Printer,
+  Puzzle,
+  BarChart3,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation } from "react-router-dom";
@@ -26,7 +28,9 @@ const items = [
   { title: "Clientes", url: "/clients", icon: Users },
   { title: "Orçamentos", url: "/quotes", icon: FileText },
   { title: "Pedidos", url: "/orders", icon: Package },
+  { title: "Peças", url: "/parts", icon: Puzzle },
   { title: "Financeiro", url: "/financial", icon: DollarSign },
+  { title: "Relatórios", url: "/reports", icon: BarChart3 },
   { title: "Estoque", url: "/stock", icon: Boxes },
   { title: "Configurações", url: "/settings", icon: Settings },
 ];

@@ -1,4 +1,5 @@
 import { useAuth } from "@/contexts/AuthContext";
+import { useCompany } from "@/contexts/CompanyContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
@@ -30,15 +31,16 @@ const statusOrder: OrderStatus[] = ["queue", "printing", "post_processing", "fin
 
 export default function Orders() {
   const { user } = useAuth();
+  const { currentCompanyId } = useCompany();
   const qc = useQueryClient();
 
   const { data: orders = [] } = useQuery({
-    queryKey: ["orders", user?.id],
+    queryKey: ["orders", currentCompanyId],
     queryFn: async () => {
-      const { data } = await supabase.from("orders").select("*").eq("user_id", user!.id).order("created_at", { ascending: false });
+      const { data } = await supabase.from("orders").select("*").eq("company_id", currentCompanyId!).order("created_at", { ascending: false });
       return data ?? [];
     },
-    enabled: !!user,
+    enabled: !!currentCompanyId,
   });
 
   const updateStatus = useMutation({
@@ -46,12 +48,12 @@ export default function Orders() {
       const { error } = await supabase.from("orders").update({ status }).eq("id", id);
       if (error) throw error;
 
-      // Auto create income record when delivered
       if (status === "delivered") {
         const order = orders.find((o) => o.id === id);
         if (order && order.final_price) {
           await supabase.from("financial_records").insert({
             user_id: user!.id,
+            company_id: currentCompanyId!,
             type: "income",
             amount: order.final_price,
             category: "Pedido entregue",
@@ -71,7 +73,6 @@ export default function Orders() {
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold tracking-tight">Pedidos</h1>
-
       <Card>
         <CardContent className="p-0">
           <Table>

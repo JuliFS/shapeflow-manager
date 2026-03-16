@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
+import { useCompany } from "@/contexts/CompanyContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -25,6 +26,7 @@ const emptyForm: ClientForm = { name: "", cpf: "", phone: "", email: "", company
 
 export default function Clients() {
   const { user } = useAuth();
+  const { currentCompanyId } = useCompany();
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
@@ -32,12 +34,12 @@ export default function Clients() {
   const [search, setSearch] = useState("");
 
   const { data: clients = [] } = useQuery({
-    queryKey: ["clients", user?.id],
+    queryKey: ["clients", currentCompanyId],
     queryFn: async () => {
-      const { data } = await supabase.from("clients").select("*").eq("user_id", user!.id).order("created_at", { ascending: false });
+      const { data } = await supabase.from("clients").select("*").eq("company_id", currentCompanyId!).order("created_at", { ascending: false });
       return data ?? [];
     },
-    enabled: !!user,
+    enabled: !!currentCompanyId,
   });
 
   const save = useMutation({
@@ -46,7 +48,7 @@ export default function Clients() {
         const { error } = await supabase.from("clients").update(form).eq("id", editId);
         if (error) throw error;
       } else {
-        const { error } = await supabase.from("clients").insert({ ...form, user_id: user!.id });
+        const { error } = await supabase.from("clients").insert({ ...form, user_id: user!.id, company_id: currentCompanyId! });
         if (error) throw error;
       }
     },
@@ -99,10 +101,7 @@ export default function Clients() {
             <DialogHeader>
               <DialogTitle>{editId ? "Editar Cliente" : "Novo Cliente"}</DialogTitle>
             </DialogHeader>
-            <form
-              onSubmit={(e) => { e.preventDefault(); save.mutate(); }}
-              className="space-y-4"
-            >
+            <form onSubmit={(e) => { e.preventDefault(); save.mutate(); }} className="space-y-4">
               <div className="space-y-2">
                 <Label>Nome *</Label>
                 <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />

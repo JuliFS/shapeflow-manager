@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
+import { useCompany } from "@/contexts/CompanyContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -15,26 +16,27 @@ import { toast } from "sonner";
 
 export default function Stock() {
   const { user } = useAuth();
+  const { currentCompanyId } = useCompany();
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ material_id: "", material_name: "", initial_weight_g: 1000, remaining_weight_g: 1000 });
 
   const { data: materials = [] } = useQuery({
-    queryKey: ["materials", user?.id],
+    queryKey: ["materials", currentCompanyId],
     queryFn: async () => {
-      const { data } = await supabase.from("materials").select("*").eq("user_id", user!.id);
+      const { data } = await supabase.from("materials").select("*").eq("company_id", currentCompanyId!);
       return data ?? [];
     },
-    enabled: !!user,
+    enabled: !!currentCompanyId,
   });
 
   const { data: stock = [] } = useQuery({
-    queryKey: ["stock", user?.id],
+    queryKey: ["stock", currentCompanyId],
     queryFn: async () => {
-      const { data } = await supabase.from("filament_stock").select("*").eq("user_id", user!.id).order("created_at", { ascending: false });
+      const { data } = await supabase.from("filament_stock").select("*").eq("company_id", currentCompanyId!).order("created_at", { ascending: false });
       return data ?? [];
     },
-    enabled: !!user,
+    enabled: !!currentCompanyId,
   });
 
   const save = useMutation({
@@ -42,6 +44,7 @@ export default function Stock() {
       const mat = materials.find((m) => m.id === form.material_id);
       const { error } = await supabase.from("filament_stock").insert({
         user_id: user!.id,
+        company_id: currentCompanyId!,
         material_id: form.material_id || null,
         material_name: mat?.name ?? form.material_name,
         initial_weight_g: form.initial_weight_g,

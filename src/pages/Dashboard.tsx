@@ -1,58 +1,49 @@
-import { useAuth } from "@/contexts/AuthContext";
+import { useCompany } from "@/contexts/CompanyContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { DollarSign, TrendingUp, TrendingDown, Package, FileText, Wallet } from "lucide-react";
+import { DollarSign, TrendingUp, TrendingDown, Package, Wallet } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { format, startOfMonth, endOfMonth } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
 export default function Dashboard() {
-  const { user } = useAuth();
+  const { currentCompanyId } = useCompany();
 
   const { data: orders } = useQuery({
-    queryKey: ["orders", user?.id],
+    queryKey: ["orders", currentCompanyId],
     queryFn: async () => {
-      const { data } = await supabase.from("orders").select("*").eq("user_id", user!.id);
+      const { data } = await supabase.from("orders").select("*").eq("company_id", currentCompanyId!);
       return data ?? [];
     },
-    enabled: !!user,
-  });
-
-  const { data: quotes } = useQuery({
-    queryKey: ["quotes", user?.id],
-    queryFn: async () => {
-      const { data } = await supabase.from("quotes").select("*").eq("user_id", user!.id);
-      return data ?? [];
-    },
-    enabled: !!user,
+    enabled: !!currentCompanyId,
   });
 
   const { data: financials } = useQuery({
-    queryKey: ["financials", user?.id],
+    queryKey: ["financials", currentCompanyId],
     queryFn: async () => {
-      const { data } = await supabase.from("financial_records").select("*").eq("user_id", user!.id);
+      const { data } = await supabase.from("financial_records").select("*").eq("company_id", currentCompanyId!);
       return data ?? [];
     },
-    enabled: !!user,
+    enabled: !!currentCompanyId,
   });
 
   const { data: fixedExpenses } = useQuery({
-    queryKey: ["fixed_expenses", user?.id],
+    queryKey: ["fixed_expenses", currentCompanyId],
     queryFn: async () => {
-      const { data } = await supabase.from("fixed_expenses" as any).select("*").eq("user_id", user!.id).eq("active", true);
+      const { data } = await supabase.from("fixed_expenses").select("*").eq("company_id", currentCompanyId!).eq("active", true);
       return (data as any[]) ?? [];
     },
-    enabled: !!user,
+    enabled: !!currentCompanyId,
   });
 
   const { data: variableExpenses } = useQuery({
-    queryKey: ["variable_expenses", user?.id],
+    queryKey: ["variable_expenses", currentCompanyId],
     queryFn: async () => {
-      const { data } = await supabase.from("variable_expenses" as any).select("*").eq("user_id", user!.id);
+      const { data } = await supabase.from("variable_expenses").select("*").eq("company_id", currentCompanyId!);
       return (data as any[]) ?? [];
     },
-    enabled: !!user,
+    enabled: !!currentCompanyId,
   });
 
   const now = new Date();
@@ -76,8 +67,6 @@ export default function Dashboard() {
   const ordersInProduction = (orders ?? []).filter(
     (o) => o.status === "printing" || o.status === "post_processing" || o.status === "queue"
   ).length;
-
-  const pendingQuotes = (quotes ?? []).filter((q) => q.status === "draft" || q.status === "sent").length;
 
   const chartData = Array.from({ length: 6 }, (_, i) => {
     const d = new Date(now.getFullYear(), now.getMonth() - (5 - i), 1);

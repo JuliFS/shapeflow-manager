@@ -1,5 +1,6 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
+import { useCompany } from "@/contexts/CompanyContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -15,46 +16,33 @@ import { Badge } from "@/components/ui/badge";
 import { Plus, FileDown, Upload, Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
+import { useLocation } from "react-router-dom";
 import jsPDF from "jspdf";
 import type { Database } from "@/integrations/supabase/types";
 
 type QuoteStatus = Database["public"]["Enums"]["quote_status"];
 
 const statusLabels: Record<QuoteStatus, string> = {
-  draft: "Rascunho",
-  sent: "Enviado",
-  approved: "Aprovado",
-  rejected: "Recusado",
+  draft: "Rascunho", sent: "Enviado", approved: "Aprovado", rejected: "Recusado",
 };
-
 const statusColors: Record<QuoteStatus, string> = {
-  draft: "bg-muted text-muted-foreground",
-  sent: "bg-primary/10 text-primary",
+  draft: "bg-muted text-muted-foreground", sent: "bg-primary/10 text-primary",
   approved: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
   rejected: "bg-destructive/10 text-destructive",
 };
 
 const emptyForm = {
-  client_id: "",
-  piece_name: "",
-  printer_id: "",
-  material_id: "",
-  weight_grams: 0,
-  print_time_hours: 0,
-  finishing: "",
-  post_processing_hours: 0,
-  has_modeling: false,
-  modeling_hours: 0,
-  margin: 0.3,
-  delivery_days: 7,
-  payment_method: "",
-  shipping_cost: 0,
-  discount: 0,
+  client_id: "", piece_name: "", printer_id: "", material_id: "",
+  weight_grams: 0, print_time_hours: 0, finishing: "", post_processing_hours: 0,
+  has_modeling: false, modeling_hours: 0, margin: 0.3, delivery_days: 7,
+  payment_method: "", shipping_cost: 0, discount: 0,
 };
 
 export default function Quotes() {
   const { user } = useAuth();
+  const { currentCompanyId } = useCompany();
   const qc = useQueryClient();
+  const location = useLocation();
   const [open, setOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [editQuoteNumber, setEditQuoteNumber] = useState<string | null>(null);
@@ -63,49 +51,70 @@ export default function Quotes() {
   const [form, setForm] = useState({ ...emptyForm });
 
   const { data: clients = [] } = useQuery({
-    queryKey: ["clients", user?.id],
+    queryKey: ["clients", currentCompanyId],
     queryFn: async () => {
-      const { data } = await supabase.from("clients").select("*").eq("user_id", user!.id);
+      const { data } = await supabase.from("clients").select("*").eq("company_id", currentCompanyId!);
       return data ?? [];
     },
-    enabled: !!user,
+    enabled: !!currentCompanyId,
   });
 
   const { data: printers = [] } = useQuery({
-    queryKey: ["printers", user?.id],
+    queryKey: ["printers", currentCompanyId],
     queryFn: async () => {
-      const { data } = await supabase.from("printers").select("*").eq("user_id", user!.id);
+      const { data } = await supabase.from("printers").select("*").eq("company_id", currentCompanyId!);
       return data ?? [];
     },
-    enabled: !!user,
+    enabled: !!currentCompanyId,
   });
 
   const { data: materials = [] } = useQuery({
-    queryKey: ["materials", user?.id],
+    queryKey: ["materials", currentCompanyId],
     queryFn: async () => {
-      const { data } = await supabase.from("materials").select("*").eq("user_id", user!.id);
+      const { data } = await supabase.from("materials").select("*").eq("company_id", currentCompanyId!);
       return data ?? [];
     },
-    enabled: !!user,
+    enabled: !!currentCompanyId,
   });
 
   const { data: quotes = [] } = useQuery({
-    queryKey: ["quotes", user?.id],
+    queryKey: ["quotes", currentCompanyId],
     queryFn: async () => {
-      const { data } = await supabase.from("quotes").select("*").eq("user_id", user!.id).order("created_at", { ascending: false });
+      const { data } = await supabase.from("quotes").select("*").eq("company_id", currentCompanyId!).order("created_at", { ascending: false });
       return data ?? [];
     },
-    enabled: !!user,
+    enabled: !!currentCompanyId,
   });
 
   const { data: profile } = useQuery({
-    queryKey: ["profile", user?.id],
+    queryKey: ["profile", currentCompanyId],
     queryFn: async () => {
-      const { data } = await supabase.from("profiles").select("*").eq("user_id", user!.id).single();
+      const { data } = await supabase.from("profiles").select("*").eq("company_id", currentCompanyId!).single();
       return data;
     },
-    enabled: !!user,
+    enabled: !!currentCompanyId,
   });
+
+  // Handle navigation from Parts library
+  useEffect(() => {
+    const state = location.state as any;
+    if (state?.fromPart) {
+      const p = state.fromPart;
+      setForm({
+        ...emptyForm,
+        piece_name: p.name,
+        material_id: p.default_material_id ?? "",
+        weight_grams: p.avg_weight_grams ?? 0,
+        print_time_hours: p.avg_print_time_hours ?? 0,
+        margin: profile?.default_margin ?? 0.3,
+      });
+      setEditId(null);
+      setEditQuoteNumber(null);
+      setOpen(true);
+      // Clear the state
+      window.history.replaceState({}, document.title);
+    }
+  }, [location.state, profile]);
 
   const selectedPrinter = printers.find((p) => p.id === form.printer_id);
   const selectedMaterial = materials.find((m) => m.id === form.material_id);
@@ -160,6 +169,7 @@ export default function Quotes() {
         const quoteNumber = format(now, "ddMMyyyyHHmm");
         const { error } = await supabase.from("quotes").insert({
           user_id: user!.id,
+          company_id: currentCompanyId!,
           quote_number: quoteNumber,
           status: "draft" as QuoteStatus,
           ...payload,
@@ -186,6 +196,7 @@ export default function Quotes() {
         if (quote) {
           const { error: orderError } = await supabase.from("orders").insert({
             user_id: user!.id,
+            company_id: currentCompanyId!,
             quote_id: id,
             quote_number: quote.quote_number,
             client_name: quote.client_name,
@@ -217,30 +228,20 @@ export default function Quotes() {
   });
 
   const openEdit = (q: any) => {
-    if (q.status === "approved") {
-      setApprovedWarning(q);
-      return;
-    }
+    if (q.status === "approved") { setApprovedWarning(q); return; }
     fillFormForEdit(q);
   };
 
   const fillFormForEdit = (q: any) => {
     setForm({
-      client_id: q.client_id ?? "",
-      piece_name: q.piece_name,
-      printer_id: q.printer_id ?? "",
-      material_id: q.material_id ?? "",
-      weight_grams: q.weight_grams ?? 0,
-      print_time_hours: q.print_time_hours ?? 0,
-      finishing: q.finishing ?? "",
-      post_processing_hours: q.post_processing_hours ?? 0,
-      has_modeling: q.has_modeling ?? false,
-      modeling_hours: q.modeling_hours ?? 0,
-      margin: q.margin ?? 0.3,
-      delivery_days: q.delivery_days ?? 7,
-      payment_method: q.payment_method ?? "",
-      shipping_cost: q.shipping_cost ?? 0,
-      discount: (q as any).discount ?? 0,
+      client_id: q.client_id ?? "", piece_name: q.piece_name,
+      printer_id: q.printer_id ?? "", material_id: q.material_id ?? "",
+      weight_grams: q.weight_grams ?? 0, print_time_hours: q.print_time_hours ?? 0,
+      finishing: q.finishing ?? "", post_processing_hours: q.post_processing_hours ?? 0,
+      has_modeling: q.has_modeling ?? false, modeling_hours: q.modeling_hours ?? 0,
+      margin: q.margin ?? 0.3, delivery_days: q.delivery_days ?? 7,
+      payment_method: q.payment_method ?? "", shipping_cost: q.shipping_cost ?? 0,
+      discount: q.discount ?? 0,
     });
     setEditId(q.id);
     setEditQuoteNumber(q.quote_number);
@@ -258,7 +259,6 @@ export default function Quotes() {
     const doc = new jsPDF();
     const pw = doc.internal.pageSize.getWidth();
 
-    // Logo / Company name
     doc.setFontSize(20);
     doc.setFont("helvetica", "bold");
     doc.text(profile?.company_name || "3D Manager", pw / 2, 25, { align: "center" });
@@ -266,7 +266,6 @@ export default function Quotes() {
     doc.setFontSize(10);
     doc.setFont("helvetica", "normal");
     doc.text("ORÇAMENTO", pw / 2, 35, { align: "center" });
-
     doc.setFontSize(9);
     doc.text(`Nº ${quote.quote_number}`, pw / 2, 42, { align: "center" });
 
@@ -282,9 +281,8 @@ export default function Quotes() {
     y += 8;
     doc.text(`Material: ${quote.material_name || "—"}`, 20, y);
 
-    // Financial summary (commercial only)
     const shippingCost = quote.shipping_cost ?? 0;
-    const discount = (quote as any).discount ?? 0;
+    const discount = quote.discount ?? 0;
     const basePrice = (quote.final_price ?? 0) + discount - shippingCost;
 
     y += 20;
@@ -293,16 +291,9 @@ export default function Quotes() {
     doc.text("Resumo Financeiro", 20, y);
     y += 8;
     doc.text(`Valor da peça: R$ ${basePrice.toFixed(2)}`, 30, y);
-    if (discount > 0) {
-      y += 7;
-      doc.text(`Desconto: - R$ ${discount.toFixed(2)}`, 30, y);
-    }
-    if (shippingCost > 0) {
-      y += 7;
-      doc.text(`Frete: + R$ ${shippingCost.toFixed(2)}`, 30, y);
-    }
+    if (discount > 0) { y += 7; doc.text(`Desconto: - R$ ${discount.toFixed(2)}`, 30, y); }
+    if (shippingCost > 0) { y += 7; doc.text(`Frete: + R$ ${shippingCost.toFixed(2)}`, 30, y); }
 
-    // TOTAL highlight
     y += 15;
     doc.setFillColor(37, 99, 235);
     doc.roundedRect(30, y - 8, pw - 60, 30, 4, 4, "F");
@@ -325,14 +316,9 @@ export default function Quotes() {
     const footerY = doc.internal.pageSize.getHeight() - 20;
     doc.setFontSize(8);
     doc.setTextColor(120);
-    const footerLines = [
-      profile?.company_name || "",
-      [profile?.company_phone, profile?.company_email].filter(Boolean).join(" • "),
-      profile?.company_address || "",
-    ].filter(Boolean);
-    footerLines.forEach((line, i) => {
-      doc.text(line, pw / 2, footerY + i * 4, { align: "center" });
-    });
+    [profile?.company_name || "", [profile?.company_phone, profile?.company_email].filter(Boolean).join(" • "), profile?.company_address || ""]
+      .filter(Boolean)
+      .forEach((line, i) => doc.text(line!, pw / 2, footerY + i * 4, { align: "center" }));
 
     doc.save(`orcamento-${quote.quote_number}.pdf`);
   };
@@ -340,10 +326,7 @@ export default function Quotes() {
   const handleStlUpload = async (quoteId: string, file: File) => {
     const path = `${user!.id}/${quoteId}-${file.name}`;
     const { error: uploadError } = await supabase.storage.from("stl-files").upload(path, file);
-    if (uploadError) {
-      toast.error("Erro ao enviar arquivo");
-      return;
-    }
+    if (uploadError) { toast.error("Erro ao enviar arquivo"); return; }
     const { data: urlData } = supabase.storage.from("stl-files").getPublicUrl(path);
     await supabase.from("quotes").update({ stl_file_url: urlData.publicUrl }).eq("id", quoteId);
     qc.invalidateQueries({ queryKey: ["quotes"] });
@@ -352,38 +335,28 @@ export default function Quotes() {
 
   return (
     <div className="space-y-6">
-      {/* Approved edit warning */}
       <AlertDialog open={!!approvedWarning} onOpenChange={() => setApprovedWarning(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Orçamento Aprovado</AlertDialogTitle>
-            <AlertDialogDescription>
-              Este orçamento já foi aprovado e um pedido foi gerado. Editar pode causar inconsistências. Deseja continuar?
-            </AlertDialogDescription>
+            <AlertDialogDescription>Este orçamento já foi aprovado e um pedido foi gerado. Editar pode causar inconsistências. Deseja continuar?</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={() => { fillFormForEdit(approvedWarning); setApprovedWarning(null); }}>
-              Editar mesmo assim
-            </AlertDialogAction>
+            <AlertDialogAction onClick={() => { fillFormForEdit(approvedWarning); setApprovedWarning(null); }}>Editar mesmo assim</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Delete confirmation */}
       <AlertDialog open={!!deleteConfirm} onOpenChange={() => setDeleteConfirm(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Excluir Orçamento</AlertDialogTitle>
-            <AlertDialogDescription>
-              Tem certeza que deseja excluir este orçamento? Esta ação não pode ser desfeita.
-            </AlertDialogDescription>
+            <AlertDialogDescription>Tem certeza que deseja excluir este orçamento? Esta ação não pode ser desfeita.</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={() => { if (deleteConfirm) deleteQuote.mutate(deleteConfirm); setDeleteConfirm(null); }}>
-              Excluir
-            </AlertDialogAction>
+            <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={() => { if (deleteConfirm) deleteQuote.mutate(deleteConfirm); setDeleteConfirm(null); }}>Excluir</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
@@ -396,9 +369,7 @@ export default function Quotes() {
           </DialogTrigger>
           <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>
-                {editId ? `Editar Orçamento #${editQuoteNumber}` : "Calculadora de Impressão 3D"}
-              </DialogTitle>
+              <DialogTitle>{editId ? `Editar Orçamento #${editQuoteNumber}` : "Calculadora de Impressão 3D"}</DialogTitle>
             </DialogHeader>
             <form onSubmit={(e) => { e.preventDefault(); save.mutate(); }} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
@@ -406,9 +377,7 @@ export default function Quotes() {
                   <Label>Cliente</Label>
                   <Select value={form.client_id} onValueChange={(v) => setForm({ ...form, client_id: v })}>
                     <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                    <SelectContent>
-                      {clients.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-                    </SelectContent>
+                    <SelectContent>{clients.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
                 <div className="space-y-2">
@@ -422,35 +391,22 @@ export default function Quotes() {
                   <Label>Impressora</Label>
                   <Select value={form.printer_id} onValueChange={(v) => setForm({ ...form, printer_id: v })}>
                     <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                    <SelectContent>
-                      {printers.map((p) => <SelectItem key={p.id} value={p.id}>{p.name} (R$ {p.cost_per_hour?.toFixed(2)}/h)</SelectItem>)}
-                    </SelectContent>
+                    <SelectContent>{printers.map((p) => <SelectItem key={p.id} value={p.id}>{p.name} (R$ {p.cost_per_hour?.toFixed(2)}/h)</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
                 <div className="space-y-2">
                   <Label>Material</Label>
                   <Select value={form.material_id} onValueChange={(v) => setForm({ ...form, material_id: v })}>
                     <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                    <SelectContent>
-                      {materials.map((m) => <SelectItem key={m.id} value={m.id}>{m.name} - {m.color}</SelectItem>)}
-                    </SelectContent>
+                    <SelectContent>{materials.map((m) => <SelectItem key={m.id} value={m.id}>{m.name} - {m.color}</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
               </div>
 
               <div className="grid grid-cols-3 gap-4">
-                <div className="space-y-2">
-                  <Label>Peso (g)</Label>
-                  <Input type="number" min={0} step={0.1} value={form.weight_grams} onChange={(e) => setForm({ ...form, weight_grams: +e.target.value })} />
-                </div>
-                <div className="space-y-2">
-                  <Label>Tempo Impressão (h)</Label>
-                  <Input type="number" min={0} step={0.1} value={form.print_time_hours} onChange={(e) => setForm({ ...form, print_time_hours: +e.target.value })} />
-                </div>
-                <div className="space-y-2">
-                  <Label>Pós-processamento (h)</Label>
-                  <Input type="number" min={0} step={0.1} value={form.post_processing_hours} onChange={(e) => setForm({ ...form, post_processing_hours: +e.target.value })} />
-                </div>
+                <div className="space-y-2"><Label>Peso (g)</Label><Input type="number" min={0} step={0.1} value={form.weight_grams} onChange={(e) => setForm({ ...form, weight_grams: +e.target.value })} /></div>
+                <div className="space-y-2"><Label>Tempo Impressão (h)</Label><Input type="number" min={0} step={0.1} value={form.print_time_hours} onChange={(e) => setForm({ ...form, print_time_hours: +e.target.value })} /></div>
+                <div className="space-y-2"><Label>Pós-processamento (h)</Label><Input type="number" min={0} step={0.1} value={form.post_processing_hours} onChange={(e) => setForm({ ...form, post_processing_hours: +e.target.value })} /></div>
               </div>
 
               <div className="space-y-2">
@@ -472,35 +428,19 @@ export default function Quotes() {
               </div>
 
               <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Margem (%)</Label>
-                  <Input type="number" min={0} max={500} step={1} value={form.margin * 100} onChange={(e) => setForm({ ...form, margin: +e.target.value / 100 })} />
-                </div>
-                <div className="space-y-2">
-                  <Label>Desconto (R$)</Label>
-                  <Input type="number" min={0} step={0.01} value={form.discount} onChange={(e) => setForm({ ...form, discount: +e.target.value })} />
-                </div>
+                <div className="space-y-2"><Label>Margem (%)</Label><Input type="number" min={0} max={500} step={1} value={form.margin * 100} onChange={(e) => setForm({ ...form, margin: +e.target.value / 100 })} /></div>
+                <div className="space-y-2"><Label>Desconto (R$)</Label><Input type="number" min={0} step={0.01} value={form.discount} onChange={(e) => setForm({ ...form, discount: +e.target.value })} /></div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Frete (R$)</Label>
-                  <Input type="number" min={0} step={0.01} value={form.shipping_cost} onChange={(e) => setForm({ ...form, shipping_cost: +e.target.value })} />
-                </div>
+                <div className="space-y-2"><Label>Frete (R$)</Label><Input type="number" min={0} step={0.01} value={form.shipping_cost} onChange={(e) => setForm({ ...form, shipping_cost: +e.target.value })} /></div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Prazo (dias)</Label>
-                  <Input type="number" min={1} value={form.delivery_days} onChange={(e) => setForm({ ...form, delivery_days: +e.target.value })} />
-                </div>
-                <div className="space-y-2">
-                  <Label>Pagamento</Label>
-                  <Input value={form.payment_method} onChange={(e) => setForm({ ...form, payment_method: e.target.value })} placeholder="PIX, cartão..." />
-                </div>
+                <div className="space-y-2"><Label>Prazo (dias)</Label><Input type="number" min={1} value={form.delivery_days} onChange={(e) => setForm({ ...form, delivery_days: +e.target.value })} /></div>
+                <div className="space-y-2"><Label>Pagamento</Label><Input value={form.payment_method} onChange={(e) => setForm({ ...form, payment_method: e.target.value })} placeholder="PIX, cartão..." /></div>
               </div>
 
-              {/* Detalhamento de Custos (interno) */}
               <Card className="bg-muted/50 border-dashed">
                 <CardContent className="pt-4 space-y-1 text-sm">
                   <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Detalhamento de Custos (interno)</p>
@@ -542,50 +482,34 @@ export default function Quotes() {
             </TableHeader>
             <TableBody>
               {quotes.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={6} className="text-center text-muted-foreground py-8">Nenhum orçamento</TableCell>
+                <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">Nenhum orçamento</TableCell></TableRow>
+              ) : quotes.map((q) => (
+                <TableRow key={q.id}>
+                  <TableCell className="font-mono text-xs">{q.quote_number}</TableCell>
+                  <TableCell>{q.client_name}</TableCell>
+                  <TableCell>{q.piece_name}</TableCell>
+                  <TableCell className="font-semibold">R$ {(q.final_price ?? 0).toFixed(2)}</TableCell>
+                  <TableCell><Badge variant="secondary" className={statusColors[q.status]}>{statusLabels[q.status]}</Badge></TableCell>
+                  <TableCell>
+                    <div className="flex gap-1">
+                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(q)}><Pencil className="h-3.5 w-3.5" /></Button>
+                      {q.status === "draft" && <Button variant="ghost" size="sm" onClick={() => updateStatus.mutate({ id: q.id, status: "sent" })}>Enviar</Button>}
+                      {q.status === "sent" && (
+                        <>
+                          <Button variant="ghost" size="sm" className="text-green-600" onClick={() => updateStatus.mutate({ id: q.id, status: "approved" })}>Aprovar</Button>
+                          <Button variant="ghost" size="sm" className="text-destructive" onClick={() => updateStatus.mutate({ id: q.id, status: "rejected" })}>Recusar</Button>
+                        </>
+                      )}
+                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => generatePDF(q)}><FileDown className="h-3.5 w-3.5" /></Button>
+                      <label className="cursor-pointer">
+                        <input type="file" accept=".stl" className="hidden" onChange={(e) => e.target.files?.[0] && handleStlUpload(q.id, e.target.files[0])} />
+                        <Button variant="ghost" size="icon" className="h-8 w-8" asChild><span><Upload className="h-3.5 w-3.5" /></span></Button>
+                      </label>
+                      <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => setDeleteConfirm(q.id)}><Trash2 className="h-3.5 w-3.5" /></Button>
+                    </div>
+                  </TableCell>
                 </TableRow>
-              ) : (
-                quotes.map((q) => (
-                  <TableRow key={q.id}>
-                    <TableCell className="font-mono text-xs">{q.quote_number}</TableCell>
-                    <TableCell>{q.client_name}</TableCell>
-                    <TableCell>{q.piece_name}</TableCell>
-                    <TableCell className="font-semibold">R$ {(q.final_price ?? 0).toFixed(2)}</TableCell>
-                    <TableCell>
-                      <Badge variant="secondary" className={statusColors[q.status]}>{statusLabels[q.status]}</Badge>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex gap-1">
-                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(q)}>
-                          <Pencil className="h-3.5 w-3.5" />
-                        </Button>
-                        {q.status === "draft" && (
-                          <Button variant="ghost" size="sm" onClick={() => updateStatus.mutate({ id: q.id, status: "sent" })}>Enviar</Button>
-                        )}
-                        {q.status === "sent" && (
-                          <>
-                            <Button variant="ghost" size="sm" className="text-green-600" onClick={() => updateStatus.mutate({ id: q.id, status: "approved" })}>Aprovar</Button>
-                            <Button variant="ghost" size="sm" className="text-destructive" onClick={() => updateStatus.mutate({ id: q.id, status: "rejected" })}>Recusar</Button>
-                          </>
-                        )}
-                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => generatePDF(q)}>
-                          <FileDown className="h-3.5 w-3.5" />
-                        </Button>
-                        <label className="cursor-pointer">
-                          <input type="file" accept=".stl" className="hidden" onChange={(e) => e.target.files?.[0] && handleStlUpload(q.id, e.target.files[0])} />
-                          <Button variant="ghost" size="icon" className="h-8 w-8" asChild>
-                            <span><Upload className="h-3.5 w-3.5" /></span>
-                          </Button>
-                        </label>
-                        <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => setDeleteConfirm(q.id)}>
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
+              ))}
             </TableBody>
           </Table>
         </CardContent>

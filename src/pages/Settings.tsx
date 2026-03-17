@@ -409,6 +409,169 @@ function CompanyPlanTab() {
   );
 }
 
+function TeamTab() {
+  const { user } = useAuth();
+  const { currentCompanyId } = useCompany();
+  const qc = useQueryClient();
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteRole, setInviteRole] = useState("member");
+
+  const { data: members = [] } = useQuery({
+    queryKey: ["team_members", currentCompanyId],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("user_companies")
+        .select("id, user_id, role, created_at")
+        .eq("company_id", currentCompanyId!);
+      return data ?? [];
+    },
+    enabled: !!currentCompanyId,
+  });
+
+  const { data: invitations = [] } = useQuery({
+    queryKey: ["invitations", currentCompanyId],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("company_invitations")
+        .select("*")
+        .eq("company_id", currentCompanyId!)
+        .eq("status", "pending");
+      return (data as any[]) ?? [];
+    },
+    enabled: !!currentCompanyId,
+  });
+
+  const sendInvite = useMutation({
+    mutationFn: async () => {
+      if (!inviteEmail.trim()) return;
+      const { error } = await supabase.from("company_invitations").insert({
+        company_id: currentCompanyId!,
+        email: inviteEmail.trim().toLowerCase(),
+        role: inviteRole,
+        invited_by: user!.id,
+      } as any);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["invitations"] });
+      setInviteEmail("");
+      toast.success("Convite enviado!");
+    },
+    onError: (e: any) => toast.error(e.message),
+  });
+
+  const cancelInvite = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("company_invitations").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["invitations"] });
+      toast.success("Convite cancelado!");
+    },
+  });
+
+  const removeMember = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("user_companies").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["team_members"] });
+      toast.success("Membro removido!");
+    },
+  });
+
+  return (
+    <div className="space-y-6">
+      <Card>
+        <CardHeader><CardTitle>Convidar Membro</CardTitle></CardHeader>
+        <CardContent>
+          <form onSubmit={(e) => { e.preventDefault(); sendInvite.mutate(); }} className="flex gap-3 items-end">
+            <div className="flex-1 space-y-2">
+              <Label>Email</Label>
+              <Input type="email" value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} placeholder="email@exemplo.com" required />
+            </div>
+            <div className="w-32 space-y-2">
+              <Label>Função</Label>
+              <Select value={inviteRole} onValueChange={setInviteRole}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="member">Membro</SelectItem>
+                  <SelectItem value="admin">Admin</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <Button type="submit" disabled={sendInvite.isPending}>
+              <Plus className="h-4 w-4 mr-1" /> Convidar
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
+
+      {invitations.length > 0 && (
+        <Card>
+          <CardHeader><CardTitle className="text-base">Convites Pendentes</CardTitle></CardHeader>
+          <CardContent className="p-0">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Email</TableHead>
+                  <TableHead>Função</TableHead>
+                  <TableHead className="w-20"></TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {invitations.map((inv: any) => (
+                  <TableRow key={inv.id}>
+                    <TableCell>{inv.email}</TableCell>
+                    <TableCell><Badge variant="secondary">{inv.role}</Badge></TableCell>
+                    <TableCell>
+                      <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => cancelInvite.mutate(inv.id)}>
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
+
+      <Card>
+        <CardHeader><CardTitle className="text-base">Membros da Equipe</CardTitle></CardHeader>
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Usuário</TableHead>
+                <TableHead>Função</TableHead>
+                <TableHead className="w-20"></TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {members.map((m: any) => (
+                <TableRow key={m.id}>
+                  <TableCell className="font-mono text-xs">{m.user_id === user?.id ? "Você" : m.user_id.slice(0, 8) + "..."}</TableCell>
+                  <TableCell><Badge variant="secondary">{m.role}</Badge></TableCell>
+                  <TableCell>
+                    {m.user_id !== user?.id && (
+                      <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => removeMember.mutate(m.id)}>
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    )}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 export default function SettingsPage() {
   return (
     <div className="space-y-6">
@@ -419,12 +582,14 @@ export default function SettingsPage() {
           <TabsTrigger value="printers">Impressoras</TabsTrigger>
           <TabsTrigger value="materials">Materiais</TabsTrigger>
           <TabsTrigger value="software">Softwares</TabsTrigger>
+          <TabsTrigger value="team">Equipe</TabsTrigger>
           <TabsTrigger value="plan">Plano</TabsTrigger>
         </TabsList>
         <TabsContent value="profile" className="mt-4"><ProfileTab /></TabsContent>
         <TabsContent value="printers" className="mt-4"><PrintersTab /></TabsContent>
         <TabsContent value="materials" className="mt-4"><MaterialsTab /></TabsContent>
         <TabsContent value="software" className="mt-4"><SoftwareTab /></TabsContent>
+        <TabsContent value="team" className="mt-4"><TeamTab /></TabsContent>
         <TabsContent value="plan" className="mt-4"><CompanyPlanTab /></TabsContent>
       </Tabs>
     </div>

@@ -88,6 +88,44 @@ export type Database = {
         }
         Relationships: []
       }
+      company_invitations: {
+        Row: {
+          company_id: string
+          created_at: string
+          email: string
+          id: string
+          invited_by: string
+          role: string
+          status: string
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          email: string
+          id?: string
+          invited_by: string
+          role?: string
+          status?: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          email?: string
+          id?: string
+          invited_by?: string
+          role?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "company_invitations_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       filament_stock: {
         Row: {
           company_id: string | null
@@ -767,6 +805,24 @@ export type Database = {
           },
         ]
       }
+      super_admins: {
+        Row: {
+          created_at: string
+          id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_companies: {
         Row: {
           company_id: string
@@ -851,6 +907,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      is_super_admin: { Args: { _user_id: string }; Returns: boolean }
       user_belongs_to_company: {
         Args: { _company_id: string; _user_id: string }
         Returns: boolean

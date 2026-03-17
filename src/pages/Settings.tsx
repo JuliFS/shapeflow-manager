@@ -435,7 +435,7 @@ function TeamTab() {
         .from("company_invitations")
         .select("*")
         .eq("company_id", currentCompanyId!)
-        .eq("status", "pending");
+        .order("created_at", { ascending: false });
       return (data as any[]) ?? [];
     },
     enabled: !!currentCompanyId,
@@ -444,13 +444,38 @@ function TeamTab() {
   const sendInvite = useMutation({
     mutationFn: async () => {
       if (!inviteEmail.trim()) return;
+      const email = inviteEmail.trim().toLowerCase();
+      
+      // Save invitation to DB
       const { error } = await supabase.from("company_invitations").insert({
         company_id: currentCompanyId!,
-        email: inviteEmail.trim().toLowerCase(),
+        email,
         role: inviteRole,
         invited_by: user!.id,
       } as any);
       if (error) throw error;
+
+      // Get company name for the email
+      const { data: company } = await supabase
+        .from("companies")
+        .select("name")
+        .eq("id", currentCompanyId!)
+        .single();
+
+      // Send invite email via edge function
+      try {
+        await supabase.functions.invoke("send-invite-email", {
+          body: {
+            email,
+            companyName: company?.name ?? "3D Manager",
+            role: inviteRole,
+            siteUrl: window.location.origin,
+          },
+        });
+      } catch (emailErr) {
+        console.error("Email sending failed:", emailErr);
+        // Don't fail the invite if email fails
+      }
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["invitations"] });
@@ -511,13 +536,14 @@ function TeamTab() {
 
       {invitations.length > 0 && (
         <Card>
-          <CardHeader><CardTitle className="text-base">Convites Pendentes</CardTitle></CardHeader>
+          <CardHeader><CardTitle className="text-base">Convites</CardTitle></CardHeader>
           <CardContent className="p-0">
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Email</TableHead>
                   <TableHead>Função</TableHead>
+                  <TableHead>Status</TableHead>
                   <TableHead className="w-20"></TableHead>
                 </TableRow>
               </TableHeader>
@@ -527,9 +553,16 @@ function TeamTab() {
                     <TableCell>{inv.email}</TableCell>
                     <TableCell><Badge variant="secondary">{inv.role}</Badge></TableCell>
                     <TableCell>
-                      <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => cancelInvite.mutate(inv.id)}>
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
+                      <Badge variant={inv.status === "accepted" ? "default" : "outline"} className={inv.status === "accepted" ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" : ""}>
+                        {inv.status === "accepted" ? "Aceito" : "Pendente"}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      {inv.status === "pending" && (
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => cancelInvite.mutate(inv.id)}>
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}

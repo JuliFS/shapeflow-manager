@@ -907,6 +907,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      accept_pending_invitations: {
+        Args: { _email: string; _user_id: string }
+        Returns: undefined
+      }
       is_super_admin: { Args: { _user_id: string }; Returns: boolean }
       user_belongs_to_company: {
         Args: { _company_id: string; _user_id: string }

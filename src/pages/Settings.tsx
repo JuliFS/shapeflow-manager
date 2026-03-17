@@ -444,13 +444,38 @@ function TeamTab() {
   const sendInvite = useMutation({
     mutationFn: async () => {
       if (!inviteEmail.trim()) return;
+      const email = inviteEmail.trim().toLowerCase();
+      
+      // Save invitation to DB
       const { error } = await supabase.from("company_invitations").insert({
         company_id: currentCompanyId!,
-        email: inviteEmail.trim().toLowerCase(),
+        email,
         role: inviteRole,
         invited_by: user!.id,
       } as any);
       if (error) throw error;
+
+      // Get company name for the email
+      const { data: company } = await supabase
+        .from("companies")
+        .select("name")
+        .eq("id", currentCompanyId!)
+        .single();
+
+      // Send invite email via edge function
+      try {
+        await supabase.functions.invoke("send-invite-email", {
+          body: {
+            email,
+            companyName: company?.name ?? "3D Manager",
+            role: inviteRole,
+            siteUrl: window.location.origin,
+          },
+        });
+      } catch (emailErr) {
+        console.error("Email sending failed:", emailErr);
+        // Don't fail the invite if email fails
+      }
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["invitations"] });

@@ -23,10 +23,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       setSession(session);
       setUser(session?.user ?? null);
       setLoading(false);
+
+      // Auto-accept pending invitations on login
+      if (session?.user && _event === 'SIGNED_IN') {
+        try {
+          await supabase.rpc('accept_pending_invitations', {
+            _user_id: session.user.id,
+            _email: session.user.email ?? '',
+          });
+        } catch (e) {
+          console.error('Error accepting invitations:', e);
+        }
+      }
     });
 
     supabase.auth.getSession().then(({ data: { session } }) => {

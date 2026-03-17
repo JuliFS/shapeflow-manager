@@ -17,6 +17,7 @@ import Stock from "@/pages/Stock";
 import Settings from "@/pages/Settings";
 import Parts from "@/pages/Parts";
 import Reports from "@/pages/Reports";
+import SuperAdmin from "@/pages/SuperAdmin";
 import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient();

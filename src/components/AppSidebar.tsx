@@ -43,6 +43,21 @@ export function AppSidebar() {
   const { state } = useSidebar();
   const collapsed = state === "collapsed";
   const location = useLocation();
+  const { user } = useAuth();
+
+  const { data: isSuperAdmin } = useQuery({
+    queryKey: ["is_super_admin", user?.id],
+    queryFn: async () => {
+      const { data } = await supabase.from("super_admins").select("id").eq("user_id", user!.id).maybeSingle();
+      return !!data;
+    },
+    enabled: !!user,
+  });
+
+  const allItems = [
+    ...items,
+    ...(isSuperAdmin ? [{ title: "Super Admin", url: "/admin", icon: Shield }] : []),
+  ];
 
   return (
     <Sidebar collapsible="icon" className="border-r border-sidebar-border">

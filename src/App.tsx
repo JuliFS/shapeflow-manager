@@ -17,6 +17,7 @@ import Stock from "@/pages/Stock";
 import Settings from "@/pages/Settings";
 import Parts from "@/pages/Parts";
 import Reports from "@/pages/Reports";
+import SuperAdmin from "@/pages/SuperAdmin";
 import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -55,6 +56,7 @@ const App = () => (
                 <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
                 <Route path="/parts" element={<ProtectedRoute><Parts /></ProtectedRoute>} />
                 <Route path="/reports" element={<ProtectedRoute><Reports /></ProtectedRoute>} />
+                <Route path="/admin" element={<ProtectedRoute><SuperAdmin /></ProtectedRoute>} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </BrowserRouter>

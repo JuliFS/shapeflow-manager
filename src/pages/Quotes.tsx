@@ -95,6 +95,18 @@ export default function Quotes() {
     enabled: !!currentCompanyId,
   });
 
+  const { currentCompany } = useCompany();
+
+  // Free plan: 10 quotes per month limit
+  const monthlyQuoteCount = useMemo(() => {
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+    return quotes.filter((q) => q.created_at >= monthStart).length;
+  }, [quotes]);
+
+  const isFreePlan = currentCompany?.plan === "free";
+  const quoteLimitReached = isFreePlan && monthlyQuoteCount >= 10;
+
   // Handle navigation from Parts library
   useEffect(() => {
     const state = location.state as any;
@@ -362,10 +374,20 @@ export default function Quotes() {
       </AlertDialog>
 
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold tracking-tight">Orçamentos</h1>
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Orçamentos</h1>
+          {isFreePlan && (
+            <p className="text-xs text-muted-foreground mt-1">
+              Plano Free: {monthlyQuoteCount}/10 orçamentos este mês
+              {quoteLimitReached && <span className="text-destructive font-medium ml-1">— Limite atingido</span>}
+            </p>
+          )}
+        </div>
         <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) { setEditId(null); setEditQuoteNumber(null); } }}>
           <DialogTrigger asChild>
-            <Button onClick={openNew}><Plus className="h-4 w-4 mr-1" /> Novo Orçamento</Button>
+            <Button onClick={openNew} disabled={quoteLimitReached && !editId}>
+              <Plus className="h-4 w-4 mr-1" /> Novo Orçamento
+            </Button>
           </DialogTrigger>
           <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>

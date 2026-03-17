@@ -435,7 +435,7 @@ function TeamTab() {
         .from("company_invitations")
         .select("*")
         .eq("company_id", currentCompanyId!)
-        .eq("status", "pending");
+        .order("created_at", { ascending: false });
       return (data as any[]) ?? [];
     },
     enabled: !!currentCompanyId,

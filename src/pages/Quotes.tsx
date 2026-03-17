@@ -95,6 +95,18 @@ export default function Quotes() {
     enabled: !!currentCompanyId,
   });
 
+  const { currentCompany } = useCompany();
+
+  // Free plan: 10 quotes per month limit
+  const monthlyQuoteCount = useMemo(() => {
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+    return quotes.filter((q) => q.created_at >= monthStart).length;
+  }, [quotes]);
+
+  const isFreePlan = currentCompany?.plan === "free";
+  const quoteLimitReached = isFreePlan && monthlyQuoteCount >= 10;
+
   // Handle navigation from Parts library
   useEffect(() => {
     const state = location.state as any;

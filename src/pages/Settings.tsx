@@ -302,6 +302,7 @@ function ProfileTab() {
   const { user } = useAuth();
   const { currentCompanyId } = useCompany();
   const qc = useQueryClient();
+  const [uploading, setUploading] = useState(false);
 
   const { data: profile } = useQuery({
     queryKey: ["profile", currentCompanyId],
@@ -314,7 +315,7 @@ function ProfileTab() {
 
   const [form, setForm] = useState({
     company_name: "", owner_name: "", company_email: "", company_phone: "", company_address: "",
-    hourly_rate: 50, modeling_hourly_rate: 80, default_margin: 30,
+    hourly_rate: 50, modeling_hourly_rate: 80, default_margin: 30, company_logo_url: "",
   });
 
   const [loaded, setLoaded] = useState(false);
@@ -329,15 +330,44 @@ function ProfileTab() {
       hourly_rate: profile.hourly_rate ?? 50,
       modeling_hourly_rate: profile.modeling_hourly_rate ?? 80,
       default_margin: (profile.default_margin ?? 0.3) * 100,
+      company_logo_url: profile.company_logo_url ?? "",
     });
     setLoaded(true);
   }
 
+  const handleLogoUpload = async (file: File) => {
+    if (!user || !currentCompanyId) return;
+    setUploading(true);
+    try {
+      const ext = file.name.split(".").pop();
+      const path = `${currentCompanyId}/logo.${ext}`;
+      const { error: uploadError } = await supabase.storage.from("logos").upload(path, file, { upsert: true });
+      if (uploadError) throw uploadError;
+      const { data: urlData } = supabase.storage.from("logos").getPublicUrl(path);
+      const logoUrl = urlData.publicUrl + "?t=" + Date.now();
+      setForm((prev) => ({ ...prev, company_logo_url: logoUrl }));
+      await supabase.from("profiles").update({ company_logo_url: logoUrl }).eq("user_id", user.id);
+      qc.invalidateQueries({ queryKey: ["profile"] });
+      toast.success("Logo enviado!");
+    } catch (err: any) {
+      toast.error(err.message || "Erro ao enviar logo");
+    } finally {
+      setUploading(false);
+    }
+  };
+
   const save = useMutation({
     mutationFn: async () => {
       const { error } = await supabase.from("profiles").update({
-        ...form,
+        company_name: form.company_name,
+        owner_name: form.owner_name,
+        company_email: form.company_email,
+        company_phone: form.company_phone,
+        company_address: form.company_address,
+        hourly_rate: form.hourly_rate,
+        modeling_hourly_rate: form.modeling_hourly_rate,
         default_margin: form.default_margin / 100,
+        company_logo_url: form.company_logo_url,
       }).eq("user_id", user!.id);
       if (error) throw error;
     },
@@ -352,6 +382,26 @@ function ProfileTab() {
       <CardHeader><CardTitle>Dados da Empresa</CardTitle></CardHeader>
       <CardContent>
         <form onSubmit={(e) => { e.preventDefault(); save.mutate(); }} className="space-y-4 max-w-lg">
+          {/* Logo upload */}
+          <div className="space-y-2">
+            <Label>Logo da Empresa</Label>
+            <div className="flex items-center gap-4">
+              {form.company_logo_url ? (
+                <img src={form.company_logo_url} alt="Logo" className="h-16 w-16 rounded-lg object-contain border border-border bg-background" />
+              ) : (
+                <div className="h-16 w-16 rounded-lg border-2 border-dashed border-border flex items-center justify-center text-muted-foreground text-xs">Logo</div>
+              )}
+              <div>
+                <label className="cursor-pointer">
+                  <input type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && handleLogoUpload(e.target.files[0])} />
+                  <Button type="button" variant="outline" size="sm" disabled={uploading} asChild>
+                    <span>{uploading ? "Enviando..." : "Enviar Logo"}</span>
+                  </Button>
+                </label>
+                <p className="text-xs text-muted-foreground mt-1">PNG ou JPG, será exibido no PDF</p>
+              </div>
+            </div>
+          </div>
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2"><Label>Nome da Empresa</Label><Input value={form.company_name} onChange={(e) => setForm({ ...form, company_name: e.target.value })} /></div>
             <div className="space-y-2"><Label>Responsável</Label><Input value={form.owner_name} onChange={(e) => setForm({ ...form, owner_name: e.target.value })} /></div>

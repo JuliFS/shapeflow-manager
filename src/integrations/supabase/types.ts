@@ -654,7 +654,9 @@ export type Database = {
           print_time_hours: number
           printer_id: string | null
           printer_name: string | null
+          quote_data: Json | null
           quote_number: string
+          quote_type: string
           shipping_cost: number | null
           status: Database["public"]["Enums"]["quote_status"]
           stl_file_url: string | null
@@ -689,7 +691,9 @@ export type Database = {
           print_time_hours?: number
           printer_id?: string | null
           printer_name?: string | null
+          quote_data?: Json | null
           quote_number: string
+          quote_type?: string
           shipping_cost?: number | null
           status?: Database["public"]["Enums"]["quote_status"]
           stl_file_url?: string | null
@@ -724,7 +728,9 @@ export type Database = {
           print_time_hours?: number
           printer_id?: string | null
           printer_name?: string | null
+          quote_data?: Json | null
           quote_number?: string
+          quote_type?: string
           shipping_cost?: number | null
           status?: Database["public"]["Enums"]["quote_status"]
           stl_file_url?: string | null

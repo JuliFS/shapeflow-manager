@@ -20,8 +20,11 @@ import { useLocation } from "react-router-dom";
 import jsPDF from "jspdf";
 import type { Database } from "@/integrations/supabase/types";
 import { parseSTLVolume, analyzeSTL } from "@/lib/stl-parser";
+import { LetraCaixaForm, emptyLetraCaixa, calcLetraCaixaCosts, type LetraCaixaData } from "@/components/quotes/LetraCaixaForm";
+import { FachadaCompletaForm, emptyFachada, calcFachadaCosts, type FachadaData } from "@/components/quotes/FachadaCompletaForm";
 
 type QuoteStatus = Database["public"]["Enums"]["quote_status"];
+type QuoteType = "3d_print" | "letra_caixa" | "fachada_completa";
 
 const statusLabels: Record<QuoteStatus, string> = {
   draft: "Rascunho", sent: "Enviado", approved: "Aprovado", rejected: "Recusado",
@@ -30,6 +33,12 @@ const statusColors: Record<QuoteStatus, string> = {
   draft: "bg-muted text-muted-foreground", sent: "bg-primary/10 text-primary",
   approved: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
   rejected: "bg-destructive/10 text-destructive",
+};
+
+const quoteTypeLabels: Record<QuoteType, string> = {
+  "3d_print": "Impressão 3D",
+  "letra_caixa": "Letra Caixa",
+  "fachada_completa": "Fachada Completa",
 };
 
 const emptyForm = {
@@ -53,6 +62,9 @@ export default function Quotes() {
   const [stlParsing, setStlParsing] = useState(false);
   const [stlVolume, setStlVolume] = useState<number | null>(null);
   const stlInputRef = useRef<HTMLInputElement>(null);
+  const [quoteType, setQuoteType] = useState<QuoteType>("3d_print");
+  const [letraCaixaData, setLetraCaixaData] = useState<LetraCaixaData>({ ...emptyLetraCaixa });
+  const [fachadaData, setFachadaData] = useState<FachadaData>({ ...emptyFachada });
 
   const { data: clients = [] } = useQuery({
     queryKey: ["clients", currentCompanyId],
@@ -120,6 +132,7 @@ export default function Quotes() {
         print_time_hours: p.avg_print_time_hours ?? 0,
         margin: profile?.default_margin ?? 0.3,
       });
+      setQuoteType("3d_print");
       setEditId(null);
       setEditQuoteNumber(null);
       setOpen(true);
@@ -131,7 +144,8 @@ export default function Quotes() {
   const selectedMaterial = materials.find((m) => m.id === form.material_id);
   const selectedClient = clients.find((c) => c.id === form.client_id);
 
-  const costs = useMemo(() => {
+  // 3D Print costs
+  const costs3d = useMemo(() => {
     const hourlyRate = profile?.hourly_rate ?? 50;
     const modelingRate = profile?.modeling_hourly_rate ?? 80;
     const costPerGram = selectedMaterial ? selectedMaterial.cost_per_kg / 1000 : 0;
@@ -147,6 +161,27 @@ export default function Quotes() {
 
     return { material_cost, machine_cost, labor_cost, modeling_cost, total_cost, base_price, final_price };
   }, [form, selectedPrinter, selectedMaterial, profile]);
+
+  // Letra Caixa costs
+  const costsLC = useMemo(() => {
+    const hourlyRate = profile?.hourly_rate ?? 50;
+    const c = calcLetraCaixaCosts(letraCaixaData, hourlyRate);
+    const base_price = c.total * (1 + form.margin);
+    const final_price = base_price - form.discount + form.shipping_cost;
+    return { ...c, base_price, final_price };
+  }, [letraCaixaData, form.margin, form.discount, form.shipping_cost, profile]);
+
+  // Fachada costs
+  const costsFC = useMemo(() => {
+    const c = calcFachadaCosts(fachadaData);
+    const base_price = c.total * (1 + form.margin);
+    const final_price = base_price - form.discount + form.shipping_cost;
+    return { ...c, base_price, final_price };
+  }, [fachadaData, form.margin, form.discount, form.shipping_cost]);
+
+  const currentTotalCost = quoteType === "3d_print" ? costs3d.total_cost : quoteType === "letra_caixa" ? costsLC.total : costsFC.total;
+  const currentBasePrice = quoteType === "3d_print" ? costs3d.base_price : quoteType === "letra_caixa" ? costsLC.base_price : costsFC.base_price;
+  const currentFinalPrice = quoteType === "3d_print" ? costs3d.final_price : quoteType === "letra_caixa" ? costsLC.final_price : costsFC.final_price;
 
   // STL file handler
   const handleSTLInForm = async (file: File) => {
@@ -172,30 +207,57 @@ export default function Quotes() {
 
   const save = useMutation({
     mutationFn: async () => {
-      const payload = {
+      const basePayload: any = {
         client_id: form.client_id || null,
         client_name: selectedClient?.name ?? "",
         piece_name: form.piece_name,
-        printer_id: form.printer_id || null,
-        printer_name: selectedPrinter?.name ?? "",
-        material_id: form.material_id || null,
-        material_name: selectedMaterial?.name ?? "",
-        weight_grams: form.weight_grams,
-        print_time_hours: form.print_time_hours,
-        finishing: form.finishing,
-        post_processing_hours: form.post_processing_hours,
-        has_modeling: form.has_modeling,
-        modeling_hours: form.modeling_hours,
         margin: form.margin,
         delivery_days: form.delivery_days,
         payment_method: form.payment_method,
         shipping_cost: form.shipping_cost,
         discount: form.discount,
-        ...costs,
+        quote_type: quoteType,
       };
 
+      if (quoteType === "3d_print") {
+        Object.assign(basePayload, {
+          printer_id: form.printer_id || null,
+          printer_name: selectedPrinter?.name ?? "",
+          material_id: form.material_id || null,
+          material_name: selectedMaterial?.name ?? "",
+          weight_grams: form.weight_grams,
+          print_time_hours: form.print_time_hours,
+          finishing: form.finishing,
+          post_processing_hours: form.post_processing_hours,
+          has_modeling: form.has_modeling,
+          modeling_hours: form.modeling_hours,
+          ...costs3d,
+          quote_data: {},
+        });
+      } else if (quoteType === "letra_caixa") {
+        Object.assign(basePayload, {
+          material_name: letraCaixaData.structure_material,
+          weight_grams: 0,
+          print_time_hours: letraCaixaData.print_time_hours,
+          total_cost: costsLC.total,
+          base_price: costsLC.base_price,
+          final_price: costsLC.final_price,
+          quote_data: letraCaixaData,
+        });
+      } else {
+        Object.assign(basePayload, {
+          material_name: fachadaData.base_material,
+          weight_grams: 0,
+          print_time_hours: 0,
+          total_cost: costsFC.total,
+          base_price: costsFC.base_price,
+          final_price: costsFC.final_price,
+          quote_data: fachadaData,
+        });
+      }
+
       if (editId) {
-        const { error } = await supabase.from("quotes").update(payload).eq("id", editId);
+        const { error } = await supabase.from("quotes").update(basePayload).eq("id", editId);
         if (error) throw error;
       } else {
         const now = new Date();
@@ -205,7 +267,7 @@ export default function Quotes() {
           company_id: currentCompanyId!,
           quote_number: quoteNumber,
           status: "draft" as QuoteStatus,
-          ...payload,
+          ...basePayload,
         });
         if (error) throw error;
       }
@@ -277,6 +339,13 @@ export default function Quotes() {
       payment_method: q.payment_method ?? "", shipping_cost: q.shipping_cost ?? 0,
       discount: q.discount ?? 0,
     });
+    const type = (q.quote_type || "3d_print") as QuoteType;
+    setQuoteType(type);
+    if (type === "letra_caixa" && q.quote_data) {
+      setLetraCaixaData({ ...emptyLetraCaixa, ...(q.quote_data as any) });
+    } else if (type === "fachada_completa" && q.quote_data) {
+      setFachadaData({ ...emptyFachada, ...(q.quote_data as any) });
+    }
     setEditId(q.id);
     setEditQuoteNumber(q.quote_number);
     setStlVolume(null);
@@ -285,6 +354,9 @@ export default function Quotes() {
 
   const openNew = () => {
     setForm({ ...emptyForm, margin: profile?.default_margin ?? 0.3 });
+    setQuoteType("3d_print");
+    setLetraCaixaData({ ...emptyLetraCaixa });
+    setFachadaData({ ...emptyFachada });
     setEditId(null);
     setEditQuoteNumber(null);
     setStlVolume(null);
@@ -297,8 +369,9 @@ export default function Quotes() {
     const ph = doc.internal.pageSize.getHeight();
     const ml = 20;
     const mr = pw - 20;
+    const qType = ((quote as any).quote_type || "3d_print") as QuoteType;
 
-    // ── Load logo if available ──
+    // ── Load logo ──
     let logoLoaded = false;
     if (profile?.company_logo_url) {
       try {
@@ -311,97 +384,82 @@ export default function Quotes() {
         });
         doc.addImage(img, "PNG", ml, 12, 28, 28);
         logoLoaded = true;
-      } catch {
-        // Skip logo if can't load
-      }
+      } catch { /* skip */ }
     }
 
     // ── Header ──
     const headerX = logoLoaded ? ml + 34 : ml;
     doc.setFontSize(18);
     doc.setFont("helvetica", "bold");
-    doc.setTextColor(30, 41, 59); // slate-800
+    doc.setTextColor(30, 41, 59);
     doc.text(profile?.company_name || currentCompany?.name || "3D Manager", headerX, 22);
-
     if (profile?.company_phone) {
-      doc.setFontSize(9);
-      doc.setFont("helvetica", "normal");
-      doc.setTextColor(100, 116, 139);
+      doc.setFontSize(9); doc.setFont("helvetica", "normal"); doc.setTextColor(100, 116, 139);
       doc.text(profile.company_phone, headerX, 28);
     }
     if (profile?.company_address) {
-      doc.setFontSize(8);
-      doc.text(profile.company_address, headerX, 33);
+      doc.setFontSize(8); doc.text(profile.company_address, headerX, 33);
     }
 
-    // Quote title right-aligned
-    doc.setFontSize(22);
-    doc.setFont("helvetica", "bold");
-    doc.setTextColor(37, 99, 235); // primary blue
+    doc.setFontSize(22); doc.setFont("helvetica", "bold"); doc.setTextColor(37, 99, 235);
     doc.text("ORÇAMENTO", mr, 22, { align: "right" });
-    doc.setFontSize(10);
-    doc.setFont("helvetica", "normal");
-    doc.setTextColor(100, 116, 139);
+    doc.setFontSize(10); doc.setFont("helvetica", "normal"); doc.setTextColor(100, 116, 139);
     doc.text(`Nº ${quote.quote_number}`, mr, 29, { align: "right" });
     doc.text(`Data: ${format(new Date(quote.created_at), "dd/MM/yyyy")}`, mr, 35, { align: "right" });
 
     // ── Divider ──
     let y = 48;
-    doc.setDrawColor(226, 232, 240);
-    doc.setLineWidth(0.8);
-    doc.line(ml, y, mr, y);
+    doc.setDrawColor(226, 232, 240); doc.setLineWidth(0.8); doc.line(ml, y, mr, y);
 
-    // ── Client block ──
+    // ── Client ──
     y += 12;
-    doc.setFillColor(248, 250, 252); // slate-50
+    doc.setFillColor(248, 250, 252);
     doc.roundedRect(ml, y - 5, pw - 40, 28, 3, 3, "F");
-
-    doc.setFontSize(8);
-    doc.setFont("helvetica", "bold");
-    doc.setTextColor(100, 116, 139);
+    doc.setFontSize(8); doc.setFont("helvetica", "bold"); doc.setTextColor(100, 116, 139);
     doc.text("CLIENTE", ml + 6, y + 1);
-    doc.setFontSize(12);
-    doc.setFont("helvetica", "bold");
-    doc.setTextColor(30, 41, 59);
+    doc.setFontSize(12); doc.setFont("helvetica", "bold"); doc.setTextColor(30, 41, 59);
     doc.text(quote.client_name || "—", ml + 6, y + 10);
-
-    // CPF from client record
     const client = clients.find(c => c.id === quote.client_id);
     if (client?.cpf) {
-      doc.setFontSize(9);
-      doc.setFont("helvetica", "normal");
-      doc.setTextColor(100, 116, 139);
+      doc.setFontSize(9); doc.setFont("helvetica", "normal"); doc.setTextColor(100, 116, 139);
       doc.text(`CPF: ${client.cpf}`, ml + 6, y + 17);
     }
 
-    // ── Piece block ──
+    // ── Project description ──
     y += 38;
     doc.setFillColor(248, 250, 252);
-    doc.roundedRect(ml, y - 5, pw - 40, 22, 3, 3, "F");
+    doc.roundedRect(ml, y - 5, pw - 40, 28, 3, 3, "F");
+    doc.setFontSize(8); doc.setFont("helvetica", "bold"); doc.setTextColor(100, 116, 139);
 
-    doc.setFontSize(8);
-    doc.setFont("helvetica", "bold");
-    doc.setTextColor(100, 116, 139);
-    doc.text("PEÇA", ml + 6, y + 1);
-    doc.setFontSize(11);
-    doc.setFont("helvetica", "bold");
-    doc.setTextColor(30, 41, 59);
-    doc.text(quote.piece_name, ml + 6, y + 10);
-    doc.setFontSize(9);
-    doc.setFont("helvetica", "normal");
-    doc.setTextColor(100, 116, 139);
-    doc.text(`Material: ${quote.material_name || "—"}`, mr - 6, y + 10, { align: "right" });
+    if (qType === "3d_print") {
+      doc.text("PEÇA", ml + 6, y + 1);
+      doc.setFontSize(11); doc.setFont("helvetica", "bold"); doc.setTextColor(30, 41, 59);
+      doc.text(quote.piece_name, ml + 6, y + 10);
+      doc.setFontSize(9); doc.setFont("helvetica", "normal"); doc.setTextColor(100, 116, 139);
+      doc.text(`Material: ${quote.material_name || "—"}`, mr - 6, y + 10, { align: "right" });
+    } else if (qType === "letra_caixa") {
+      const lcData = (quote as any).quote_data as LetraCaixaData | undefined;
+      doc.text("LETRA CAIXA", ml + 6, y + 1);
+      doc.setFontSize(11); doc.setFont("helvetica", "bold"); doc.setTextColor(30, 41, 59);
+      doc.text(quote.piece_name, ml + 6, y + 10);
+      doc.setFontSize(9); doc.setFont("helvetica", "normal"); doc.setTextColor(100, 116, 139);
+      const desc = lcData ? `${lcData.letter_count} letras • ${lcData.structure_material} • LED ${lcData.led_type}` : "";
+      doc.text(desc, mr - 6, y + 10, { align: "right" });
+    } else {
+      const fcData = (quote as any).quote_data as FachadaData | undefined;
+      doc.text("FACHADA COMPLETA", ml + 6, y + 1);
+      doc.setFontSize(11); doc.setFont("helvetica", "bold"); doc.setTextColor(30, 41, 59);
+      doc.text(quote.piece_name, ml + 6, y + 10);
+      doc.setFontSize(9); doc.setFont("helvetica", "normal"); doc.setTextColor(100, 116, 139);
+      const desc = fcData ? `${fcData.base_material} • ${fcData.facade_width_cm}×${fcData.facade_height_cm}cm` : "";
+      doc.text(desc, mr - 6, y + 10, { align: "right" });
+    }
 
     // ── Financial Summary ──
-    y += 34;
-    doc.setDrawColor(226, 232, 240);
-    doc.setLineWidth(0.4);
-    doc.line(ml, y, mr, y);
+    y += 40;
+    doc.setDrawColor(226, 232, 240); doc.setLineWidth(0.4); doc.line(ml, y, mr, y);
     y += 10;
-
-    doc.setFontSize(9);
-    doc.setFont("helvetica", "bold");
-    doc.setTextColor(100, 116, 139);
+    doc.setFontSize(9); doc.setFont("helvetica", "bold"); doc.setTextColor(100, 116, 139);
     doc.text("RESUMO FINANCEIRO", ml, y);
     y += 10;
 
@@ -409,56 +467,43 @@ export default function Quotes() {
     const discount = quote.discount ?? 0;
     const basePrice = (quote.final_price ?? 0) + discount - shippingCost;
 
-    // Line items
     const drawLine = (label: string, value: string, bold = false, color?: [number, number, number]) => {
       doc.setFont("helvetica", bold ? "bold" : "normal");
-      doc.setFontSize(10);
-      doc.setTextColor(...(color || [51, 65, 85]));
+      doc.setFontSize(10); doc.setTextColor(...(color || [51, 65, 85]));
       doc.text(label, ml + 6, y);
       doc.text(value, mr - 6, y, { align: "right" });
       y += 8;
     };
 
-    drawLine("Valor da peça", `R$ ${basePrice.toFixed(2)}`);
+    drawLine(`Valor ${qType === "3d_print" ? "da peça" : "do projeto"}`, `R$ ${basePrice.toFixed(2)}`);
     if (discount > 0) drawLine("Desconto", `- R$ ${discount.toFixed(2)}`, false, [22, 163, 74]);
     if (shippingCost > 0) drawLine("Frete", `+ R$ ${shippingCost.toFixed(2)}`);
 
-    // ── Total highlight ──
+    // ── Total ──
     y += 6;
     const totalBoxH = 36;
     doc.setFillColor(37, 99, 235);
     doc.roundedRect(ml, y, pw - 40, totalBoxH, 4, 4, "F");
-
     doc.setTextColor(255, 255, 255);
-    doc.setFontSize(11);
-    doc.setFont("helvetica", "normal");
+    doc.setFontSize(11); doc.setFont("helvetica", "normal");
     doc.text("TOTAL", pw / 2, y + 12, { align: "center" });
-    doc.setFontSize(24);
-    doc.setFont("helvetica", "bold");
+    doc.setFontSize(24); doc.setFont("helvetica", "bold");
     doc.text(`R$ ${(quote.final_price ?? 0).toFixed(2)}`, pw / 2, y + 27, { align: "center" });
 
     // ── Delivery & Payment ──
     y += totalBoxH + 14;
-    doc.setTextColor(51, 65, 85);
-    doc.setFontSize(9);
-    doc.setFont("helvetica", "normal");
+    doc.setTextColor(51, 65, 85); doc.setFontSize(9); doc.setFont("helvetica", "normal");
     if (quote.delivery_days) doc.text(`Prazo de entrega: ${quote.delivery_days} dias úteis`, ml, y);
     y += 7;
     if (quote.payment_method) doc.text(`Forma de pagamento: ${quote.payment_method}`, ml, y);
 
     // ── Footer ──
     const footerY = ph - 18;
-    doc.setDrawColor(226, 232, 240);
-    doc.setLineWidth(0.4);
-    doc.line(ml, footerY - 6, mr, footerY - 6);
-
-    doc.setFontSize(8);
-    doc.setTextColor(148, 163, 184);
-    doc.setFont("helvetica", "normal");
+    doc.setDrawColor(226, 232, 240); doc.setLineWidth(0.4); doc.line(ml, footerY - 6, mr, footerY - 6);
+    doc.setFontSize(8); doc.setTextColor(148, 163, 184); doc.setFont("helvetica", "normal");
     const companyName = profile?.company_name || currentCompany?.name || "";
     const phone = profile?.company_phone || "";
-    const footerParts = [companyName, phone].filter(Boolean);
-    doc.text(footerParts.join("  •  "), pw / 2, footerY, { align: "center" });
+    doc.text([companyName, phone].filter(Boolean).join("  •  "), pw / 2, footerY, { align: "center" });
 
     doc.save(`orcamento-${quote.quote_number}.pdf`);
   };
@@ -471,6 +516,42 @@ export default function Quotes() {
     await supabase.from("quotes").update({ stl_file_url: urlData.publicUrl }).eq("id", quoteId);
     qc.invalidateQueries({ queryKey: ["quotes"] });
     toast.success("Arquivo STL enviado!");
+  };
+
+  // Cost breakdown panel for the right column
+  const renderCostBreakdown = () => {
+    if (quoteType === "3d_print") {
+      return (
+        <>
+          <div className="flex justify-between"><span className="text-muted-foreground">Custo Material</span><span>R$ {costs3d.material_cost.toFixed(2)}</span></div>
+          <div className="flex justify-between"><span className="text-muted-foreground">Custo Máquina</span><span>R$ {costs3d.machine_cost.toFixed(2)}</span></div>
+          <div className="flex justify-between"><span className="text-muted-foreground">Custo Trabalho</span><span>R$ {costs3d.labor_cost.toFixed(2)}</span></div>
+          {form.has_modeling && <div className="flex justify-between"><span className="text-muted-foreground">Custo Modelagem</span><span>R$ {costs3d.modeling_cost.toFixed(2)}</span></div>}
+        </>
+      );
+    }
+    if (quoteType === "letra_caixa") {
+      return (
+        <>
+          <div className="flex justify-between"><span className="text-muted-foreground">Materiais</span><span>R$ {costsLC.materials.toFixed(2)}</span></div>
+          <div className="flex justify-between"><span className="text-muted-foreground">Iluminação</span><span>R$ {costsLC.illumination.toFixed(2)}</span></div>
+          <div className="flex justify-between"><span className="text-muted-foreground">Elétrica</span><span>R$ {costsLC.electrical.toFixed(2)}</span></div>
+          <div className="flex justify-between"><span className="text-muted-foreground">Instalação</span><span>R$ {costsLC.installation.toFixed(2)}</span></div>
+          <div className="flex justify-between"><span className="text-muted-foreground">Acabamento</span><span>R$ {costsLC.finishing.toFixed(2)}</span></div>
+          <div className="flex justify-between"><span className="text-muted-foreground">Produção</span><span>R$ {costsLC.production.toFixed(2)}</span></div>
+        </>
+      );
+    }
+    return (
+      <>
+        <div className="flex justify-between"><span className="text-muted-foreground">Base Fachada</span><span>R$ {costsFC.base.toFixed(2)}</span></div>
+        <div className="flex justify-between"><span className="text-muted-foreground">Logo</span><span>R$ {costsFC.logo.toFixed(2)}</span></div>
+        <div className="flex justify-between"><span className="text-muted-foreground">Letras Caixa</span><span>R$ {costsFC.letraCaixa.toFixed(2)}</span></div>
+        <div className="flex justify-between"><span className="text-muted-foreground">Iluminação</span><span>R$ {costsFC.illumination.toFixed(2)}</span></div>
+        <div className="flex justify-between"><span className="text-muted-foreground">Design</span><span>R$ {costsFC.design.toFixed(2)}</span></div>
+        <div className="flex justify-between"><span className="text-muted-foreground">Instalação</span><span>R$ {costsFC.installation.toFixed(2)}</span></div>
+      </>
+    );
   };
 
   return (
@@ -519,49 +600,39 @@ export default function Quotes() {
           </DialogTrigger>
           <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>{editId ? `Editar Orçamento #${editQuoteNumber}` : "Calculadora de Impressão 3D"}</DialogTitle>
+              <DialogTitle>{editId ? `Editar Orçamento #${editQuoteNumber}` : "Novo Orçamento"}</DialogTitle>
             </DialogHeader>
             <form onSubmit={(e) => { e.preventDefault(); save.mutate(); }} className="space-y-4">
+              {/* Quote Type Selector */}
+              {!editId && (
+                <div className="space-y-2">
+                  <Label className="text-sm font-semibold">Tipo de Orçamento</Label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {(["3d_print", "letra_caixa", "fachada_completa"] as QuoteType[]).map((t) => (
+                      <button
+                        key={t}
+                        type="button"
+                        onClick={() => setQuoteType(t)}
+                        className={`p-3 rounded-lg border-2 text-sm font-medium transition-all ${
+                          quoteType === t
+                            ? "border-primary bg-primary/10 text-primary"
+                            : "border-border bg-card text-muted-foreground hover:border-primary/40"
+                        }`}
+                      >
+                        {t === "3d_print" && "🖨️ "}
+                        {t === "letra_caixa" && "🔤 "}
+                        {t === "fachada_completa" && "🏢 "}
+                        {quoteTypeLabels[t]}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 {/* Left column: Form fields */}
                 <div className="lg:col-span-2 space-y-4">
-                  {/* STL Upload */}
-                  <Card className="border-dashed border-2 border-primary/30 bg-primary/5">
-                    <CardContent className="pt-4">
-                      <div className="flex items-center gap-3">
-                        <div className="flex-1">
-                          <p className="text-sm font-medium flex items-center gap-2">
-                            <Box className="h-4 w-4 text-primary" />
-                            Upload de arquivo STL
-                          </p>
-                          <p className="text-xs text-muted-foreground mt-0.5">Calcular peso e tempo automaticamente</p>
-                        </div>
-                        <input
-                          ref={stlInputRef}
-                          type="file"
-                          accept=".stl"
-                          className="hidden"
-                          onChange={(e) => e.target.files?.[0] && handleSTLInForm(e.target.files[0])}
-                        />
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          disabled={stlParsing}
-                          onClick={() => stlInputRef.current?.click()}
-                        >
-                          {stlParsing ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Upload className="h-4 w-4 mr-1" />}
-                          {stlParsing ? "Analisando..." : "Selecionar STL"}
-                        </Button>
-                      </div>
-                      {stlVolume !== null && (
-                        <p className="text-xs text-primary mt-2 font-medium">
-                          ✓ Volume calculado: {stlVolume.toFixed(2)} cm³
-                        </p>
-                      )}
-                    </CardContent>
-                  </Card>
-
+                  {/* Common fields: Client & Piece Name */}
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label>Cliente</Label>
@@ -571,72 +642,96 @@ export default function Quotes() {
                       </Select>
                     </div>
                     <div className="space-y-2">
-                      <Label>Nome da Peça *</Label>
+                      <Label>{quoteType === "3d_print" ? "Nome da Peça *" : "Descrição do Projeto *"}</Label>
                       <Input value={form.piece_name} onChange={(e) => setForm({ ...form, piece_name: e.target.value })} required />
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label>Impressora</Label>
-                      <Select value={form.printer_id} onValueChange={(v) => setForm({ ...form, printer_id: v })}>
-                        <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                        <SelectContent>{printers.map((p) => <SelectItem key={p.id} value={p.id}>{p.name} (R$ {p.cost_per_hour?.toFixed(2)}/h)</SelectItem>)}</SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Material</Label>
-                      <Select value={form.material_id} onValueChange={(v) => setForm({ ...form, material_id: v })}>
-                        <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                        <SelectContent>{materials.map((m) => <SelectItem key={m.id} value={m.id}>{m.name} - {m.color}</SelectItem>)}</SelectContent>
-                      </Select>
-                    </div>
-                  </div>
+                  {/* 3D Print specific */}
+                  {quoteType === "3d_print" && (
+                    <>
+                      <Card className="border-dashed border-2 border-primary/30 bg-primary/5">
+                        <CardContent className="pt-4">
+                          <div className="flex items-center gap-3">
+                            <div className="flex-1">
+                              <p className="text-sm font-medium flex items-center gap-2">
+                                <Box className="h-4 w-4 text-primary" /> Upload de arquivo STL
+                              </p>
+                              <p className="text-xs text-muted-foreground mt-0.5">Calcular peso e tempo automaticamente</p>
+                            </div>
+                            <input ref={stlInputRef} type="file" accept=".stl" className="hidden" onChange={(e) => e.target.files?.[0] && handleSTLInForm(e.target.files[0])} />
+                            <Button type="button" variant="outline" size="sm" disabled={stlParsing} onClick={() => stlInputRef.current?.click()}>
+                              {stlParsing ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Upload className="h-4 w-4 mr-1" />}
+                              {stlParsing ? "Analisando..." : "Selecionar STL"}
+                            </Button>
+                          </div>
+                          {stlVolume !== null && <p className="text-xs text-primary mt-2 font-medium">✓ Volume: {stlVolume.toFixed(2)} cm³</p>}
+                        </CardContent>
+                      </Card>
 
-                  <div className="grid grid-cols-3 gap-4">
-                    <div className="space-y-2">
-                      <Label>Peso (g)</Label>
-                      <Input type="number" min={0} step={0.1} value={form.weight_grams} onChange={(e) => setForm({ ...form, weight_grams: +e.target.value })} />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Tempo Impressão (h)</Label>
-                      <Input type="number" min={0} step={0.1} value={form.print_time_hours} onChange={(e) => setForm({ ...form, print_time_hours: +e.target.value })} />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Pós-processamento (h)</Label>
-                      <Input type="number" min={0} step={0.1} value={form.post_processing_hours} onChange={(e) => setForm({ ...form, post_processing_hours: +e.target.value })} />
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label>Acabamento</Label>
-                    <Input value={form.finishing} onChange={(e) => setForm({ ...form, finishing: e.target.value })} placeholder="Ex: lixamento, pintura" />
-                  </div>
-
-                  <div className="flex items-center gap-4">
-                    <div className="flex items-center gap-2">
-                      <Switch checked={form.has_modeling} onCheckedChange={(v) => setForm({ ...form, has_modeling: v })} />
-                      <Label>Possui modelagem</Label>
-                    </div>
-                    {form.has_modeling && (
-                      <div className="space-y-2 flex-1">
-                        <Label>Horas de modelagem</Label>
-                        <Input type="number" min={0} step={0.5} value={form.modeling_hours} onChange={(e) => setForm({ ...form, modeling_hours: +e.target.value })} />
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label>Impressora</Label>
+                          <Select value={form.printer_id} onValueChange={(v) => setForm({ ...form, printer_id: v })}>
+                            <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                            <SelectContent>{printers.map((p) => <SelectItem key={p.id} value={p.id}>{p.name} (R$ {p.cost_per_hour?.toFixed(2)}/h)</SelectItem>)}</SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Material</Label>
+                          <Select value={form.material_id} onValueChange={(v) => setForm({ ...form, material_id: v })}>
+                            <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                            <SelectContent>{materials.map((m) => <SelectItem key={m.id} value={m.id}>{m.name} - {m.color}</SelectItem>)}</SelectContent>
+                          </Select>
+                        </div>
                       </div>
-                    )}
-                  </div>
 
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2"><Label>Margem (%)</Label><Input type="number" min={0} max={500} step={1} value={form.margin * 100} onChange={(e) => setForm({ ...form, margin: +e.target.value / 100 })} /></div>
-                    <div className="space-y-2"><Label>Desconto (R$)</Label><Input type="number" min={0} step={0.01} value={form.discount} onChange={(e) => setForm({ ...form, discount: +e.target.value })} /></div>
-                  </div>
+                      <div className="grid grid-cols-3 gap-4">
+                        <div className="space-y-2"><Label>Peso (g)</Label><Input type="number" min={0} step={0.1} value={form.weight_grams} onChange={(e) => setForm({ ...form, weight_grams: +e.target.value })} /></div>
+                        <div className="space-y-2"><Label>Tempo Impressão (h)</Label><Input type="number" min={0} step={0.1} value={form.print_time_hours} onChange={(e) => setForm({ ...form, print_time_hours: +e.target.value })} /></div>
+                        <div className="space-y-2"><Label>Pós-processamento (h)</Label><Input type="number" min={0} step={0.1} value={form.post_processing_hours} onChange={(e) => setForm({ ...form, post_processing_hours: +e.target.value })} /></div>
+                      </div>
 
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2"><Label>Frete (R$)</Label><Input type="number" min={0} step={0.01} value={form.shipping_cost} onChange={(e) => setForm({ ...form, shipping_cost: +e.target.value })} /></div>
-                  </div>
+                      <div className="space-y-2">
+                        <Label>Acabamento</Label>
+                        <Input value={form.finishing} onChange={(e) => setForm({ ...form, finishing: e.target.value })} placeholder="Ex: lixamento, pintura" />
+                      </div>
 
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2"><Label>Prazo (dias)</Label><Input type="number" min={1} value={form.delivery_days} onChange={(e) => setForm({ ...form, delivery_days: +e.target.value })} /></div>
+                      <div className="flex items-center gap-4">
+                        <div className="flex items-center gap-2">
+                          <Switch checked={form.has_modeling} onCheckedChange={(v) => setForm({ ...form, has_modeling: v })} />
+                          <Label>Possui modelagem</Label>
+                        </div>
+                        {form.has_modeling && (
+                          <div className="space-y-2 flex-1">
+                            <Label>Horas de modelagem</Label>
+                            <Input type="number" min={0} step={0.5} value={form.modeling_hours} onChange={(e) => setForm({ ...form, modeling_hours: +e.target.value })} />
+                          </div>
+                        )}
+                      </div>
+                    </>
+                  )}
+
+                  {/* Letra Caixa specific */}
+                  {quoteType === "letra_caixa" && (
+                    <LetraCaixaForm data={letraCaixaData} onChange={setLetraCaixaData} />
+                  )}
+
+                  {/* Fachada Completa specific */}
+                  {quoteType === "fachada_completa" && (
+                    <FachadaCompletaForm data={fachadaData} onChange={setFachadaData} />
+                  )}
+
+                  {/* Common: margin, discount, shipping, delivery, payment */}
+                  <div className="border-t border-border pt-4 space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2"><Label>Margem (%)</Label><Input type="number" min={0} max={500} step={1} value={form.margin * 100} onChange={(e) => setForm({ ...form, margin: +e.target.value / 100 })} /></div>
+                      <div className="space-y-2"><Label>Desconto (R$)</Label><Input type="number" min={0} step={0.01} value={form.discount} onChange={(e) => setForm({ ...form, discount: +e.target.value })} /></div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2"><Label>Frete (R$)</Label><Input type="number" min={0} step={0.01} value={form.shipping_cost} onChange={(e) => setForm({ ...form, shipping_cost: +e.target.value })} /></div>
+                      <div className="space-y-2"><Label>Prazo (dias)</Label><Input type="number" min={1} value={form.delivery_days} onChange={(e) => setForm({ ...form, delivery_days: +e.target.value })} /></div>
+                    </div>
                     <div className="space-y-2"><Label>Pagamento</Label><Input value={form.payment_method} onChange={(e) => setForm({ ...form, payment_method: e.target.value })} placeholder="PIX, cartão..." /></div>
                   </div>
                 </div>
@@ -646,17 +741,14 @@ export default function Quotes() {
                   <Card className="border-primary/20 bg-card sticky top-0">
                     <CardContent className="pt-5 space-y-2 text-sm">
                       <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-3">Detalhamento de Custos (interno)</p>
-                      <div className="flex justify-between"><span className="text-muted-foreground">Custo Material</span><span>R$ {costs.material_cost.toFixed(2)}</span></div>
-                      <div className="flex justify-between"><span className="text-muted-foreground">Custo Máquina</span><span>R$ {costs.machine_cost.toFixed(2)}</span></div>
-                      <div className="flex justify-between"><span className="text-muted-foreground">Custo Trabalho</span><span>R$ {costs.labor_cost.toFixed(2)}</span></div>
-                      {form.has_modeling && <div className="flex justify-between"><span className="text-muted-foreground">Custo Modelagem</span><span>R$ {costs.modeling_cost.toFixed(2)}</span></div>}
-                      <div className="border-t border-border pt-2 flex justify-between font-medium"><span>Custo Total</span><span>R$ {costs.total_cost.toFixed(2)}</span></div>
-                      <div className="flex justify-between text-muted-foreground"><span>Margem ({(form.margin * 100).toFixed(0)}%)</span><span>R$ {(costs.base_price - costs.total_cost).toFixed(2)}</span></div>
-                      <div className="flex justify-between"><span>Preço Base</span><span>R$ {costs.base_price.toFixed(2)}</span></div>
-                      {form.discount > 0 && <div className="flex justify-between text-success"><span>Desconto</span><span>- R$ {form.discount.toFixed(2)}</span></div>}
+                      {renderCostBreakdown()}
+                      <div className="border-t border-border pt-2 flex justify-between font-medium"><span>Custo Total</span><span>R$ {currentTotalCost.toFixed(2)}</span></div>
+                      <div className="flex justify-between text-muted-foreground"><span>Margem ({(form.margin * 100).toFixed(0)}%)</span><span>R$ {(currentBasePrice - currentTotalCost).toFixed(2)}</span></div>
+                      <div className="flex justify-between"><span>Preço Base</span><span>R$ {currentBasePrice.toFixed(2)}</span></div>
+                      {form.discount > 0 && <div className="flex justify-between text-green-600"><span>Desconto</span><span>- R$ {form.discount.toFixed(2)}</span></div>}
                       {form.shipping_cost > 0 && <div className="flex justify-between"><span>Frete</span><span>+ R$ {form.shipping_cost.toFixed(2)}</span></div>}
                       <div className="border-t-2 border-primary/30 pt-3 flex justify-between font-bold text-lg text-primary">
-                        <span>Preço Final</span><span>R$ {costs.final_price.toFixed(2)}</span>
+                        <span>Preço Final</span><span>R$ {currentFinalPrice.toFixed(2)}</span>
                       </div>
                     </CardContent>
                   </Card>
@@ -677,8 +769,9 @@ export default function Quotes() {
             <TableHeader>
               <TableRow>
                 <TableHead>Nº</TableHead>
+                <TableHead>Tipo</TableHead>
                 <TableHead>Cliente</TableHead>
-                <TableHead>Peça</TableHead>
+                <TableHead>Descrição</TableHead>
                 <TableHead>Preço</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="w-48"></TableHead>
@@ -686,34 +779,47 @@ export default function Quotes() {
             </TableHeader>
             <TableBody>
               {quotes.length === 0 ? (
-                <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">Nenhum orçamento</TableCell></TableRow>
-              ) : quotes.map((q) => (
-                <TableRow key={q.id}>
-                  <TableCell className="font-mono text-xs">{q.quote_number}</TableCell>
-                  <TableCell>{q.client_name}</TableCell>
-                  <TableCell>{q.piece_name}</TableCell>
-                  <TableCell className="font-semibold">R$ {(q.final_price ?? 0).toFixed(2)}</TableCell>
-                  <TableCell><Badge variant="secondary" className={statusColors[q.status]}>{statusLabels[q.status]}</Badge></TableCell>
-                  <TableCell>
-                    <div className="flex gap-1">
-                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(q)}><Pencil className="h-3.5 w-3.5" /></Button>
-                      {q.status === "draft" && <Button variant="ghost" size="sm" onClick={() => updateStatus.mutate({ id: q.id, status: "sent" })}>Enviar</Button>}
-                      {q.status === "sent" && (
-                        <>
-                          <Button variant="ghost" size="sm" className="text-green-600" onClick={() => updateStatus.mutate({ id: q.id, status: "approved" })}>Aprovar</Button>
-                          <Button variant="ghost" size="sm" className="text-destructive" onClick={() => updateStatus.mutate({ id: q.id, status: "rejected" })}>Recusar</Button>
-                        </>
-                      )}
-                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => generatePDF(q)}><FileDown className="h-3.5 w-3.5" /></Button>
-                      <label className="cursor-pointer">
-                        <input type="file" accept=".stl" className="hidden" onChange={(e) => e.target.files?.[0] && handleStlUpload(q.id, e.target.files[0])} />
-                        <Button variant="ghost" size="icon" className="h-8 w-8" asChild><span><Upload className="h-3.5 w-3.5" /></span></Button>
-                      </label>
-                      <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => setDeleteConfirm(q.id)}><Trash2 className="h-3.5 w-3.5" /></Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
+                <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-8">Nenhum orçamento</TableCell></TableRow>
+              ) : quotes.map((q) => {
+                const qType = ((q as any).quote_type || "3d_print") as QuoteType;
+                return (
+                  <TableRow key={q.id}>
+                    <TableCell className="font-mono text-xs">{q.quote_number}</TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className="text-xs">
+                        {qType === "3d_print" && "🖨️"}
+                        {qType === "letra_caixa" && "🔤"}
+                        {qType === "fachada_completa" && "🏢"}
+                        {" "}{quoteTypeLabels[qType]}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>{q.client_name}</TableCell>
+                    <TableCell>{q.piece_name}</TableCell>
+                    <TableCell className="font-semibold">R$ {(q.final_price ?? 0).toFixed(2)}</TableCell>
+                    <TableCell><Badge variant="secondary" className={statusColors[q.status]}>{statusLabels[q.status]}</Badge></TableCell>
+                    <TableCell>
+                      <div className="flex gap-1">
+                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(q)}><Pencil className="h-3.5 w-3.5" /></Button>
+                        {q.status === "draft" && <Button variant="ghost" size="sm" onClick={() => updateStatus.mutate({ id: q.id, status: "sent" })}>Enviar</Button>}
+                        {q.status === "sent" && (
+                          <>
+                            <Button variant="ghost" size="sm" className="text-green-600" onClick={() => updateStatus.mutate({ id: q.id, status: "approved" })}>Aprovar</Button>
+                            <Button variant="ghost" size="sm" className="text-destructive" onClick={() => updateStatus.mutate({ id: q.id, status: "rejected" })}>Recusar</Button>
+                          </>
+                        )}
+                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => generatePDF(q)}><FileDown className="h-3.5 w-3.5" /></Button>
+                        {qType === "3d_print" && (
+                          <label className="cursor-pointer">
+                            <input type="file" accept=".stl" className="hidden" onChange={(e) => e.target.files?.[0] && handleStlUpload(q.id, e.target.files[0])} />
+                            <Button variant="ghost" size="icon" className="h-8 w-8" asChild><span><Upload className="h-3.5 w-3.5" /></span></Button>
+                          </label>
+                        )}
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => setDeleteConfirm(q.id)}><Trash2 className="h-3.5 w-3.5" /></Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
         </CardContent>

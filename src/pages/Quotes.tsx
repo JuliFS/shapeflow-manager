@@ -165,11 +165,20 @@ export default function Quotes() {
   // Letra Caixa costs
   const costsLC = useMemo(() => {
     const hourlyRate = profile?.hourly_rate ?? 50;
-    const c = calcLetraCaixaCosts(letraCaixaData, hourlyRate);
+    const modelingRate = profile?.modeling_hourly_rate ?? 80;
+    const getMaterialCostPerGram = (id: string) => {
+      const m = materials.find((mat) => mat.id === id);
+      return m ? m.cost_per_kg / 1000 : 0;
+    };
+    const getMachineRate = () => {
+      const p = printers[0]; // use first printer as default for LC
+      return p?.cost_per_hour ?? 0;
+    };
+    const c = calcLetraCaixaCosts(letraCaixaData, hourlyRate, modelingRate, getMaterialCostPerGram, getMachineRate);
     const base_price = c.total * (1 + form.margin);
     const final_price = base_price - form.discount + form.shipping_cost;
     return { ...c, base_price, final_price };
-  }, [letraCaixaData, form.margin, form.discount, form.shipping_cost, profile]);
+  }, [letraCaixaData, form.margin, form.discount, form.shipping_cost, profile, materials, printers]);
 
   // Fachada costs
   const costsFC = useMemo(() => {

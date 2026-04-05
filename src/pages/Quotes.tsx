@@ -544,12 +544,11 @@ export default function Quotes() {
     if (quoteType === "letra_caixa") {
       return (
         <>
-          <div className="flex justify-between"><span className="text-muted-foreground">Materiais</span><span>R$ {costsLC.materials.toFixed(2)}</span></div>
-          <div className="flex justify-between"><span className="text-muted-foreground">Iluminação</span><span>R$ {costsLC.illumination.toFixed(2)}</span></div>
-          <div className="flex justify-between"><span className="text-muted-foreground">Elétrica</span><span>R$ {costsLC.electrical.toFixed(2)}</span></div>
+          <div className="flex justify-between"><span className="text-muted-foreground">Impressão</span><span>R$ {costsLC.printing.toFixed(2)}</span></div>
+          <div className="flex justify-between"><span className="text-muted-foreground">Modelagem</span><span>R$ {costsLC.modeling.toFixed(2)}</span></div>
+          <div className="flex justify-between"><span className="text-muted-foreground">Componentes</span><span>R$ {costsLC.components.toFixed(2)}</span></div>
           <div className="flex justify-between"><span className="text-muted-foreground">Instalação</span><span>R$ {costsLC.installation.toFixed(2)}</span></div>
           <div className="flex justify-between"><span className="text-muted-foreground">Acabamento</span><span>R$ {costsLC.finishing.toFixed(2)}</span></div>
-          <div className="flex justify-between"><span className="text-muted-foreground">Produção</span><span>R$ {costsLC.production.toFixed(2)}</span></div>
         </>
       );
     }

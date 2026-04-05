@@ -165,11 +165,20 @@ export default function Quotes() {
   // Letra Caixa costs
   const costsLC = useMemo(() => {
     const hourlyRate = profile?.hourly_rate ?? 50;
-    const c = calcLetraCaixaCosts(letraCaixaData, hourlyRate);
+    const modelingRate = profile?.modeling_hourly_rate ?? 80;
+    const getMaterialCostPerGram = (id: string) => {
+      const m = materials.find((mat) => mat.id === id);
+      return m ? m.cost_per_kg / 1000 : 0;
+    };
+    const getMachineRate = () => {
+      const p = printers[0]; // use first printer as default for LC
+      return p?.cost_per_hour ?? 0;
+    };
+    const c = calcLetraCaixaCosts(letraCaixaData, hourlyRate, modelingRate, getMaterialCostPerGram, getMachineRate);
     const base_price = c.total * (1 + form.margin);
     const final_price = base_price - form.discount + form.shipping_cost;
     return { ...c, base_price, final_price };
-  }, [letraCaixaData, form.margin, form.discount, form.shipping_cost, profile]);
+  }, [letraCaixaData, form.margin, form.discount, form.shipping_cost, profile, materials, printers]);
 
   // Fachada costs
   const costsFC = useMemo(() => {
@@ -235,10 +244,12 @@ export default function Quotes() {
           quote_data: {},
         });
       } else if (quoteType === "letra_caixa") {
+        const totalPrintTime = letraCaixaData.pieces.reduce((s, p) => s + p.print_time_hours, 0);
+        const totalWeight = letraCaixaData.pieces.reduce((s, p) => s + p.weight_grams, 0);
         Object.assign(basePayload, {
-          material_name: letraCaixaData.structure_material,
-          weight_grams: 0,
-          print_time_hours: letraCaixaData.print_time_hours,
+          material_name: letraCaixaData.pieces.map(p => p.material_name).filter(Boolean).join(", ") || "—",
+          weight_grams: totalWeight,
+          print_time_hours: totalPrintTime,
           total_cost: costsLC.total,
           base_price: costsLC.base_price,
           final_price: costsLC.final_price,
@@ -441,9 +452,9 @@ export default function Quotes() {
       const lcData = (quote as any).quote_data as LetraCaixaData | undefined;
       doc.text("LETRA CAIXA", ml + 6, y + 1);
       doc.setFontSize(11); doc.setFont("helvetica", "bold"); doc.setTextColor(30, 41, 59);
-      doc.text(quote.piece_name, ml + 6, y + 10);
+      doc.text(lcData?.project_name || quote.piece_name, ml + 6, y + 10);
       doc.setFontSize(9); doc.setFont("helvetica", "normal"); doc.setTextColor(100, 116, 139);
-      const desc = lcData ? `${lcData.letter_count} letras • ${lcData.structure_material} • LED ${lcData.led_type}` : "";
+      const desc = lcData ? `${lcData.pieces?.length ?? 0} peças • LED ${lcData.led_type}` : "";
       doc.text(desc, mr - 6, y + 10, { align: "right" });
     } else {
       const fcData = (quote as any).quote_data as FachadaData | undefined;
@@ -533,12 +544,11 @@ export default function Quotes() {
     if (quoteType === "letra_caixa") {
       return (
         <>
-          <div className="flex justify-between"><span className="text-muted-foreground">Materiais</span><span>R$ {costsLC.materials.toFixed(2)}</span></div>
-          <div className="flex justify-between"><span className="text-muted-foreground">Iluminação</span><span>R$ {costsLC.illumination.toFixed(2)}</span></div>
-          <div className="flex justify-between"><span className="text-muted-foreground">Elétrica</span><span>R$ {costsLC.electrical.toFixed(2)}</span></div>
+          <div className="flex justify-between"><span className="text-muted-foreground">Impressão</span><span>R$ {costsLC.printing.toFixed(2)}</span></div>
+          <div className="flex justify-between"><span className="text-muted-foreground">Modelagem</span><span>R$ {costsLC.modeling.toFixed(2)}</span></div>
+          <div className="flex justify-between"><span className="text-muted-foreground">Componentes</span><span>R$ {costsLC.components.toFixed(2)}</span></div>
           <div className="flex justify-between"><span className="text-muted-foreground">Instalação</span><span>R$ {costsLC.installation.toFixed(2)}</span></div>
           <div className="flex justify-between"><span className="text-muted-foreground">Acabamento</span><span>R$ {costsLC.finishing.toFixed(2)}</span></div>
-          <div className="flex justify-between"><span className="text-muted-foreground">Produção</span><span>R$ {costsLC.production.toFixed(2)}</span></div>
         </>
       );
     }
@@ -714,7 +724,7 @@ export default function Quotes() {
 
                   {/* Letra Caixa specific */}
                   {quoteType === "letra_caixa" && (
-                    <LetraCaixaForm data={letraCaixaData} onChange={setLetraCaixaData} />
+                    <LetraCaixaForm data={letraCaixaData} onChange={setLetraCaixaData} materials={materials} printers={printers} />
                   )}
 
                   {/* Fachada Completa specific */}

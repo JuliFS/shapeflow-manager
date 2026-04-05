@@ -244,10 +244,12 @@ export default function Quotes() {
           quote_data: {},
         });
       } else if (quoteType === "letra_caixa") {
+        const totalPrintTime = letraCaixaData.pieces.reduce((s, p) => s + p.print_time_hours, 0);
+        const totalWeight = letraCaixaData.pieces.reduce((s, p) => s + p.weight_grams, 0);
         Object.assign(basePayload, {
-          material_name: letraCaixaData.structure_material,
-          weight_grams: 0,
-          print_time_hours: letraCaixaData.print_time_hours,
+          material_name: letraCaixaData.pieces.map(p => p.material_name).filter(Boolean).join(", ") || "—",
+          weight_grams: totalWeight,
+          print_time_hours: totalPrintTime,
           total_cost: costsLC.total,
           base_price: costsLC.base_price,
           final_price: costsLC.final_price,

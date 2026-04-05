@@ -20,7 +20,7 @@ import { useLocation } from "react-router-dom";
 import jsPDF from "jspdf";
 import type { Database } from "@/integrations/supabase/types";
 import { parseSTLVolume, analyzeSTL } from "@/lib/stl-parser";
-import { LetraCaixaForm, emptyLetraCaixa, calcLetraCaixaCosts, type LetraCaixaData } from "@/components/quotes/LetraCaixaForm";
+import { LetraCaixaForm, emptyLetraCaixa, calcLetraCaixaCosts, type LetraCaixaData, type LetraCaixaCosts } from "@/components/quotes/LetraCaixaForm";
 import { FachadaCompletaForm, emptyFachada, calcFachadaCosts, type FachadaData } from "@/components/quotes/FachadaCompletaForm";
 
 type QuoteStatus = Database["public"]["Enums"]["quote_status"];

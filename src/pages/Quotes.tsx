@@ -452,9 +452,9 @@ export default function Quotes() {
       const lcData = (quote as any).quote_data as LetraCaixaData | undefined;
       doc.text("LETRA CAIXA", ml + 6, y + 1);
       doc.setFontSize(11); doc.setFont("helvetica", "bold"); doc.setTextColor(30, 41, 59);
-      doc.text(quote.piece_name, ml + 6, y + 10);
+      doc.text(lcData?.project_name || quote.piece_name, ml + 6, y + 10);
       doc.setFontSize(9); doc.setFont("helvetica", "normal"); doc.setTextColor(100, 116, 139);
-      const desc = lcData ? `${lcData.letter_count} letras • ${lcData.structure_material} • LED ${lcData.led_type}` : "";
+      const desc = lcData ? `${lcData.pieces?.length ?? 0} peças • LED ${lcData.led_type}` : "";
       doc.text(desc, mr - 6, y + 10, { align: "right" });
     } else {
       const fcData = (quote as any).quote_data as FachadaData | undefined;

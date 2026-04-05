@@ -724,7 +724,7 @@ export default function Quotes() {
 
                   {/* Letra Caixa specific */}
                   {quoteType === "letra_caixa" && (
-                    <LetraCaixaForm data={letraCaixaData} onChange={setLetraCaixaData} />
+                    <LetraCaixaForm data={letraCaixaData} onChange={setLetraCaixaData} materials={materials} printers={printers} />
                   )}
 
                   {/* Fachada Completa specific */}

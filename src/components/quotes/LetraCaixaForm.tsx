@@ -149,7 +149,7 @@ interface Props {
   printers: Array<{ id: string; name: string; cost_per_hour: number | null }>;
 }
 
-export function LetraCaixaForm({ data, onChange, materials, printers }: Props) {
+export function LetraCaixaForm({ data, onChange, materials, printers: _printers }: Props) {
   const [parsingIdx, setParsingIdx] = useState<number | null>(null);
   const stlRefs = useRef<Record<number, HTMLInputElement | null>>({});
 

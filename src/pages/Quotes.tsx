@@ -916,7 +916,10 @@ export default function Quotes() {
                       <div className="space-y-2"><Label>Frete (R$)</Label><Input type="number" min={0} step={0.01} value={form.shipping_cost} onChange={(e) => setForm({ ...form, shipping_cost: +e.target.value })} /></div>
                       <div className="space-y-2"><Label>Prazo (dias)</Label><Input type="number" min={1} value={form.delivery_days} onChange={(e) => setForm({ ...form, delivery_days: +e.target.value })} /></div>
                     </div>
-                    <div className="space-y-2"><Label>Pagamento</Label><Input value={form.payment_method} onChange={(e) => setForm({ ...form, payment_method: e.target.value })} placeholder="PIX, cartão..." /></div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2"><Label>Validade (dias)</Label><Input type="number" min={1} value={form.validity_days} onChange={(e) => setForm({ ...form, validity_days: +e.target.value })} /></div>
+                      <div className="space-y-2"><Label>Pagamento</Label><Input value={form.payment_method} onChange={(e) => setForm({ ...form, payment_method: e.target.value })} placeholder="PIX, cartão..." /></div>
+                    </div>
                   </div>
                 </div>
 

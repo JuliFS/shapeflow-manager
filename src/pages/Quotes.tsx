@@ -502,7 +502,6 @@ export default function Quotes() {
     if (qType === "letra_caixa") {
       const lcData = (quote as any).quote_data as LetraCaixaData | undefined;
       projectName = lcData?.project_name || quote.piece_name;
-      projectMaterial = lcData?.pieces?.map(p => p.material_name).filter(Boolean).join(", ") || "—";
     } else if (qType === "fachada_completa") {
       const fcData = (quote as any).quote_data as FachadaData | undefined;
       projectMaterial = fcData?.base_material || "—";

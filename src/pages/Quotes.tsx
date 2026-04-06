@@ -380,10 +380,33 @@ export default function Quotes() {
     const ph = doc.internal.pageSize.getHeight();
     const ml = 20;
     const mr = pw - 20;
+    const contentW = mr - ml;
     const qType = ((quote as any).quote_type || "3d_print") as QuoteType;
 
+    // ── Helpers ──
+    const drawFooter = () => {
+      const footerY = ph - 14;
+      doc.setDrawColor(200, 210, 220);
+      doc.setLineWidth(0.3);
+      doc.line(ml, footerY - 4, mr, footerY - 4);
+      doc.setFontSize(7);
+      doc.setTextColor(140, 150, 165);
+      doc.setFont("helvetica", "normal");
+      const companyName = profile?.company_name || currentCompany?.name || "";
+      const phone = profile?.company_phone || "";
+      doc.text([companyName, phone].filter(Boolean).join("  •  "), pw / 2, footerY, { align: "center" });
+    };
+
+    const checkPageBreak = (needed: number) => {
+      if (y + needed > ph - 30) {
+        drawFooter();
+        doc.addPage();
+        y = 20;
+      }
+    };
+
     // ── Load logo ──
-    let logoLoaded = false;
+    let logoImg: HTMLImageElement | null = null;
     if (profile?.company_logo_url) {
       try {
         const img = new Image();
@@ -393,128 +416,277 @@ export default function Quotes() {
           img.onerror = () => reject();
           img.src = profile.company_logo_url!;
         });
-        doc.addImage(img, "PNG", ml, 12, 28, 28);
-        logoLoaded = true;
+        logoImg = img;
       } catch { /* skip */ }
     }
 
-    // ── Header ──
-    const headerX = logoLoaded ? ml + 34 : ml;
-    doc.setFontSize(18);
+    // ════════════════════════════════════════
+    // HEADER
+    // ════════════════════════════════════════
+    let headerBottomY = 14;
+    if (logoImg) {
+      doc.addImage(logoImg, "PNG", ml, 12, 24, 24);
+    }
+    const headerX = logoImg ? ml + 30 : ml;
+    doc.setFontSize(16);
     doc.setFont("helvetica", "bold");
     doc.setTextColor(30, 41, 59);
-    doc.text(profile?.company_name || currentCompany?.name || "3D Manager", headerX, 22);
-    if (profile?.company_phone) {
-      doc.setFontSize(9); doc.setFont("helvetica", "normal"); doc.setTextColor(100, 116, 139);
-      doc.text(profile.company_phone, headerX, 28);
-    }
-    if (profile?.company_address) {
-      doc.setFontSize(8); doc.text(profile.company_address, headerX, 33);
-    }
+    doc.text(profile?.company_name || currentCompany?.name || "Empresa", headerX, 22);
+    let subY = 28;
+    doc.setFontSize(8);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(120, 130, 145);
+    if (profile?.company_phone) { doc.text(profile.company_phone, headerX, subY); subY += 5; }
+    if (profile?.company_address) { doc.text(profile.company_address, headerX, subY); subY += 5; }
+    headerBottomY = Math.max(subY, logoImg ? 38 : subY);
 
-    doc.setFontSize(22); doc.setFont("helvetica", "bold"); doc.setTextColor(37, 99, 235);
+    // Right side: title
+    doc.setFontSize(20);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(37, 99, 235);
     doc.text("ORÇAMENTO", mr, 22, { align: "right" });
-    doc.setFontSize(10); doc.setFont("helvetica", "normal"); doc.setTextColor(100, 116, 139);
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(120, 130, 145);
     doc.text(`Nº ${quote.quote_number}`, mr, 29, { align: "right" });
     doc.text(`Data: ${format(new Date(quote.created_at), "dd/MM/yyyy")}`, mr, 35, { align: "right" });
 
-    // ── Divider ──
-    let y = 48;
-    doc.setDrawColor(226, 232, 240); doc.setLineWidth(0.8); doc.line(ml, y, mr, y);
+    // Divider
+    let y = headerBottomY + 4;
+    doc.setDrawColor(210, 218, 228);
+    doc.setLineWidth(0.6);
+    doc.line(ml, y, mr, y);
 
-    // ── Client ──
-    y += 12;
-    doc.setFillColor(248, 250, 252);
-    doc.roundedRect(ml, y - 5, pw - 40, 28, 3, 3, "F");
-    doc.setFontSize(8); doc.setFont("helvetica", "bold"); doc.setTextColor(100, 116, 139);
-    doc.text("CLIENTE", ml + 6, y + 1);
-    doc.setFontSize(12); doc.setFont("helvetica", "bold"); doc.setTextColor(30, 41, 59);
-    doc.text(quote.client_name || "—", ml + 6, y + 10);
+    // ════════════════════════════════════════
+    // CLIENT
+    // ════════════════════════════════════════
+    y += 10;
+    doc.setFontSize(7);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(140, 150, 165);
+    doc.text("CLIENTE", ml, y);
+    y += 6;
+    doc.setFontSize(11);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(30, 41, 59);
+    doc.text(quote.client_name || "—", ml, y);
     const client = clients.find(c => c.id === quote.client_id);
     if (client?.cpf) {
-      doc.setFontSize(9); doc.setFont("helvetica", "normal"); doc.setTextColor(100, 116, 139);
-      doc.text(`CPF: ${client.cpf}`, ml + 6, y + 17);
+      y += 5;
+      doc.setFontSize(9);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(100, 116, 139);
+      doc.text(`CPF: ${client.cpf}`, ml, y);
     }
 
-    // ── Project description ──
-    y += 38;
-    doc.setFillColor(248, 250, 252);
-    doc.roundedRect(ml, y - 5, pw - 40, 28, 3, 3, "F");
-    doc.setFontSize(8); doc.setFont("helvetica", "bold"); doc.setTextColor(100, 116, 139);
+    // ════════════════════════════════════════
+    // PROJECT INFO
+    // ════════════════════════════════════════
+    y += 12;
+    doc.setFontSize(7);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(140, 150, 165);
+    doc.text("PROJETO", ml, y);
+    y += 6;
+    doc.setFontSize(11);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(30, 41, 59);
+
+    let projectName = quote.piece_name;
+    let projectType = quoteTypeLabels[qType];
+    let projectMaterial = quote.material_name || "—";
+
+    if (qType === "letra_caixa") {
+      const lcData = (quote as any).quote_data as LetraCaixaData | undefined;
+      projectName = lcData?.project_name || quote.piece_name;
+      projectMaterial = lcData?.pieces?.map(p => p.material_name).filter(Boolean).join(", ") || "—";
+    } else if (qType === "fachada_completa") {
+      const fcData = (quote as any).quote_data as FachadaData | undefined;
+      projectMaterial = fcData?.base_material || "—";
+    }
+
+    doc.text(projectName, ml, y);
+    y += 6;
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(80, 90, 105);
+    doc.text(`Tipo: ${projectType}`, ml, y);
+    doc.text(`Material: ${projectMaterial}`, ml + 70, y);
+
+    // ════════════════════════════════════════
+    // DETAILED ITEMS TABLE
+    // ════════════════════════════════════════
+    y += 14;
+    doc.setDrawColor(210, 218, 228);
+    doc.setLineWidth(0.3);
+    doc.line(ml, y, mr, y);
+    y += 8;
+    doc.setFontSize(7);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(140, 150, 165);
+    doc.text("DESCRIÇÃO DOS SERVIÇOS", ml, y);
+    y += 8;
+
+    // Table header
+    doc.setFillColor(245, 247, 250);
+    doc.rect(ml, y - 4, contentW, 8, "F");
+    doc.setFontSize(8);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(80, 90, 105);
+    doc.text("Item", ml + 4, y);
+    doc.text("Descrição", ml + 60, y);
+    doc.text("Valor", mr - 4, y, { align: "right" });
+    y += 8;
+
+    // Build items list based on quote type (sale values, not internal costs)
+    const margin = quote.margin ?? 0.3;
+    const applyMargin = (cost: number) => cost * (1 + margin);
+
+    type PdfItem = { name: string; desc: string; value: number };
+    const items: PdfItem[] = [];
 
     if (qType === "3d_print") {
-      doc.text("PEÇA", ml + 6, y + 1);
-      doc.setFontSize(11); doc.setFont("helvetica", "bold"); doc.setTextColor(30, 41, 59);
-      doc.text(quote.piece_name, ml + 6, y + 10);
-      doc.setFontSize(9); doc.setFont("helvetica", "normal"); doc.setTextColor(100, 116, 139);
-      doc.text(`Material: ${quote.material_name || "—"}`, mr - 6, y + 10, { align: "right" });
+      const totalCost = quote.total_cost ?? 0;
+      items.push({ name: "Impressão 3D", desc: `${quote.piece_name} — ${quote.material_name || ""}`, value: applyMargin(totalCost) });
     } else if (qType === "letra_caixa") {
       const lcData = (quote as any).quote_data as LetraCaixaData | undefined;
-      doc.text("LETRA CAIXA", ml + 6, y + 1);
-      doc.setFontSize(11); doc.setFont("helvetica", "bold"); doc.setTextColor(30, 41, 59);
-      doc.text(lcData?.project_name || quote.piece_name, ml + 6, y + 10);
-      doc.setFontSize(9); doc.setFont("helvetica", "normal"); doc.setTextColor(100, 116, 139);
-      const desc = lcData ? `${lcData.pieces?.length ?? 0} peças • LED ${lcData.led_type}` : "";
-      doc.text(desc, mr - 6, y + 10, { align: "right" });
+      if (lcData) {
+        const hourlyRate = profile?.hourly_rate ?? 50;
+        const modelingRate = profile?.modeling_hourly_rate ?? 80;
+        const getMaterialCost = (id: string) => { const m = materials.find(mat => mat.id === id); return m ? m.cost_per_kg / 1000 : 0; };
+        const getMachineRate = () => printers[0]?.cost_per_hour ?? 0;
+        const c = calcLetraCaixaCosts(lcData, hourlyRate, modelingRate, getMaterialCost, getMachineRate);
+        if (c.printing > 0) items.push({ name: "Estrutura em impressão 3D", desc: `${lcData.pieces?.length ?? 0} peças`, value: applyMargin(c.printing) });
+        if (c.modeling > 0) items.push({ name: "Modelagem 3D", desc: `${lcData.modeling_hours}h de projeto`, value: applyMargin(c.modeling) });
+        if (c.components > 0) {
+          const compParts: string[] = [];
+          if (lcData.acrylic_cost > 0) compParts.push("acrílico");
+          if (lcData.led_meters > 0) compParts.push(`LED ${lcData.led_type}`);
+          if (lcData.power_supply_qty > 0) compParts.push("fonte");
+          items.push({ name: "Componentes", desc: compParts.join(", ") || "componentes diversos", value: applyMargin(c.components) });
+        }
+        if (c.installation > 0) items.push({ name: "Instalação", desc: "fixação, gabarito e deslocamento", value: applyMargin(c.installation) });
+        if (c.finishing > 0) items.push({ name: "Acabamento", desc: "pintura, lixamento e polimento", value: applyMargin(c.finishing) });
+      }
     } else {
       const fcData = (quote as any).quote_data as FachadaData | undefined;
-      doc.text("FACHADA COMPLETA", ml + 6, y + 1);
-      doc.setFontSize(11); doc.setFont("helvetica", "bold"); doc.setTextColor(30, 41, 59);
-      doc.text(quote.piece_name, ml + 6, y + 10);
-      doc.setFontSize(9); doc.setFont("helvetica", "normal"); doc.setTextColor(100, 116, 139);
-      const desc = fcData ? `${fcData.base_material} • ${fcData.facade_width_cm}×${fcData.facade_height_cm}cm` : "";
-      doc.text(desc, mr - 6, y + 10, { align: "right" });
+      if (fcData) {
+        const c = calcFachadaCosts(fcData);
+        if (c.base > 0) items.push({ name: "Base da fachada", desc: `${fcData.base_material} — ${fcData.facade_width_cm}×${fcData.facade_height_cm}cm`, value: applyMargin(c.base) });
+        if (c.logo > 0) items.push({ name: "Logo", desc: `${fcData.logo_type} — ${fcData.logo_material}`, value: applyMargin(c.logo) });
+        if (c.letraCaixa > 0) items.push({ name: "Letras Caixa", desc: "conjunto de letras caixa", value: applyMargin(c.letraCaixa) });
+        if (c.illumination > 0) items.push({ name: "Iluminação externa", desc: `${fcData.ext_light_qty}x ${fcData.ext_light_type}`, value: applyMargin(c.illumination) });
+        if (c.design > 0) items.push({ name: "Projeto / Design", desc: "criação visual", value: applyMargin(c.design) });
+        if (c.installation > 0) items.push({ name: "Instalação", desc: "mão de obra, equipamentos e transporte", value: applyMargin(c.installation) });
+      }
     }
 
-    // ── Financial Summary ──
-    y += 40;
-    doc.setDrawColor(226, 232, 240); doc.setLineWidth(0.4); doc.line(ml, y, mr, y);
-    y += 10;
-    doc.setFontSize(9); doc.setFont("helvetica", "bold"); doc.setTextColor(100, 116, 139);
+    // Draw items
+    let subtotal = 0;
+    items.forEach((item, i) => {
+      checkPageBreak(12);
+      // Alternating background
+      if (i % 2 === 0) {
+        doc.setFillColor(252, 253, 254);
+        doc.rect(ml, y - 4, contentW, 10, "F");
+      }
+      doc.setFontSize(9);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(40, 50, 65);
+      doc.text(item.name, ml + 4, y);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(100, 110, 125);
+      // Truncate desc if too long
+      const maxDescW = 60;
+      let descText = item.desc;
+      while (doc.getTextWidth(descText) > maxDescW && descText.length > 3) {
+        descText = descText.slice(0, -4) + "...";
+      }
+      doc.text(descText, ml + 60, y);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(40, 50, 65);
+      doc.text(`R$ ${item.value.toFixed(2)}`, mr - 4, y, { align: "right" });
+      subtotal += item.value;
+      y += 10;
+    });
+
+    // Items bottom line
+    doc.setDrawColor(210, 218, 228);
+    doc.setLineWidth(0.3);
+    doc.line(ml, y - 2, mr, y - 2);
+
+    // ════════════════════════════════════════
+    // FINANCIAL SUMMARY
+    // ════════════════════════════════════════
+    y += 8;
+    checkPageBreak(60);
+    doc.setFontSize(7);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(140, 150, 165);
     doc.text("RESUMO FINANCEIRO", ml, y);
     y += 10;
 
     const shippingCost = quote.shipping_cost ?? 0;
     const discount = quote.discount ?? 0;
-    const basePrice = (quote.final_price ?? 0) + discount - shippingCost;
 
-    const drawLine = (label: string, value: string, bold = false, color?: [number, number, number]) => {
+    const drawSummaryLine = (label: string, value: string, bold = false, color?: [number, number, number]) => {
       doc.setFont("helvetica", bold ? "bold" : "normal");
-      doc.setFontSize(10); doc.setTextColor(...(color || [51, 65, 85]));
-      doc.text(label, ml + 6, y);
-      doc.text(value, mr - 6, y, { align: "right" });
+      doc.setFontSize(10);
+      doc.setTextColor(...(color || [51, 65, 85]));
+      doc.text(label, ml + 4, y);
+      doc.text(value, mr - 4, y, { align: "right" });
       y += 8;
     };
 
-    drawLine(`Valor ${qType === "3d_print" ? "da peça" : "do projeto"}`, `R$ ${basePrice.toFixed(2)}`);
-    if (discount > 0) drawLine("Desconto", `- R$ ${discount.toFixed(2)}`, false, [22, 163, 74]);
-    if (shippingCost > 0) drawLine("Frete", `+ R$ ${shippingCost.toFixed(2)}`);
+    drawSummaryLine("Subtotal dos itens", `R$ ${subtotal.toFixed(2)}`);
+    if (discount > 0) drawSummaryLine("Desconto", `- R$ ${discount.toFixed(2)}`, false, [22, 163, 74]);
+    if (shippingCost > 0) drawSummaryLine("Frete", `+ R$ ${shippingCost.toFixed(2)}`);
 
-    // ── Total ──
-    y += 6;
-    const totalBoxH = 36;
+    // ════════════════════════════════════════
+    // TOTAL HIGHLIGHT
+    // ════════════════════════════════════════
+    y += 4;
+    checkPageBreak(42);
+    const totalBoxH = 32;
     doc.setFillColor(37, 99, 235);
-    doc.roundedRect(ml, y, pw - 40, totalBoxH, 4, 4, "F");
+    doc.roundedRect(ml, y, contentW, totalBoxH, 4, 4, "F");
     doc.setTextColor(255, 255, 255);
-    doc.setFontSize(11); doc.setFont("helvetica", "normal");
-    doc.text("TOTAL", pw / 2, y + 12, { align: "center" });
-    doc.setFontSize(24); doc.setFont("helvetica", "bold");
-    doc.text(`R$ ${(quote.final_price ?? 0).toFixed(2)}`, pw / 2, y + 27, { align: "center" });
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "normal");
+    doc.text("TOTAL FINAL", pw / 2, y + 11, { align: "center" });
+    doc.setFontSize(22);
+    doc.setFont("helvetica", "bold");
+    doc.text(`R$ ${(quote.final_price ?? 0).toFixed(2)}`, pw / 2, y + 25, { align: "center" });
 
-    // ── Delivery & Payment ──
-    y += totalBoxH + 14;
-    doc.setTextColor(51, 65, 85); doc.setFontSize(9); doc.setFont("helvetica", "normal");
-    if (quote.delivery_days) doc.text(`Prazo de entrega: ${quote.delivery_days} dias úteis`, ml, y);
-    y += 7;
-    if (quote.payment_method) doc.text(`Forma de pagamento: ${quote.payment_method}`, ml, y);
+    // ════════════════════════════════════════
+    // DELIVERY & PAYMENT
+    // ════════════════════════════════════════
+    y += totalBoxH + 12;
+    checkPageBreak(20);
+    doc.setFontSize(9);
+    doc.setTextColor(80, 90, 105);
+    doc.setFont("helvetica", "normal");
+    if (quote.delivery_days) { doc.text(`Prazo de entrega: ${quote.delivery_days} dias úteis`, ml, y); y += 6; }
+    if (quote.payment_method) { doc.text(`Forma de pagamento: ${quote.payment_method}`, ml, y); y += 6; }
 
-    // ── Footer ──
-    const footerY = ph - 18;
-    doc.setDrawColor(226, 232, 240); doc.setLineWidth(0.4); doc.line(ml, footerY - 6, mr, footerY - 6);
-    doc.setFontSize(8); doc.setTextColor(148, 163, 184); doc.setFont("helvetica", "normal");
-    const companyName = profile?.company_name || currentCompany?.name || "";
-    const phone = profile?.company_phone || "";
-    doc.text([companyName, phone].filter(Boolean).join("  •  "), pw / 2, footerY, { align: "center" });
+    // ════════════════════════════════════════
+    // NOTES
+    // ════════════════════════════════════════
+    y += 6;
+    checkPageBreak(16);
+    doc.setDrawColor(210, 218, 228);
+    doc.setLineWidth(0.2);
+    doc.line(ml, y, mr, y);
+    y += 8;
+    doc.setFontSize(7);
+    doc.setFont("helvetica", "italic");
+    doc.setTextColor(140, 150, 165);
+    doc.text("Não estão inclusos itens não especificados neste orçamento.", ml, y);
+
+    // ════════════════════════════════════════
+    // FOOTER
+    // ════════════════════════════════════════
+    drawFooter();
 
     doc.save(`orcamento-${quote.quote_number}.pdf`);
   };

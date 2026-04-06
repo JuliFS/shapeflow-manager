@@ -511,7 +511,6 @@ export default function Quotes() {
     doc.setFont("helvetica", "normal");
     doc.setTextColor(80, 90, 105);
     doc.text(`Tipo: ${projectType}`, ml, y);
-    doc.text(`Material: ${projectMaterial}`, ml + 70, y);
 
     // ════════════════════════════════════════
     // DETAILED ITEMS TABLE

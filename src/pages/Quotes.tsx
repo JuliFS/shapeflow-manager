@@ -351,6 +351,7 @@ export default function Quotes() {
       margin: q.margin ?? 0.3, delivery_days: q.delivery_days ?? 7,
       payment_method: q.payment_method ?? "", shipping_cost: q.shipping_cost ?? 0,
       discount: q.discount ?? 0, validity_days: (q.quote_data as any)?.validity_days ?? 15,
+      observations: (q.quote_data as any)?.observations ?? "",
     });
     const type = (q.quote_type || "3d_print") as QuoteType;
     setQuoteType(type);

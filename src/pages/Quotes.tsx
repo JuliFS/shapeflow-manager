@@ -45,7 +45,7 @@ const emptyForm = {
   client_id: "", piece_name: "", printer_id: "", material_id: "",
   weight_grams: 0, print_time_hours: 0, finishing: "", post_processing_hours: 0,
   has_modeling: false, modeling_hours: 0, margin: 0.3, delivery_days: 7,
-  payment_method: "", shipping_cost: 0, discount: 0,
+  payment_method: "", shipping_cost: 0, discount: 0, validity_days: 15,
 };
 
 export default function Quotes() {

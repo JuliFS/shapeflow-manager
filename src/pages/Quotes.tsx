@@ -45,7 +45,7 @@ const emptyForm = {
   client_id: "", piece_name: "", printer_id: "", material_id: "",
   weight_grams: 0, print_time_hours: 0, finishing: "", post_processing_hours: 0,
   has_modeling: false, modeling_hours: 0, margin: 0.3, delivery_days: 7,
-  payment_method: "", shipping_cost: 0, discount: 0,
+  payment_method: "", shipping_cost: 0, discount: 0, validity_days: 15,
 };
 
 export default function Quotes() {
@@ -241,7 +241,7 @@ export default function Quotes() {
           has_modeling: form.has_modeling,
           modeling_hours: form.modeling_hours,
           ...costs3d,
-          quote_data: {},
+          quote_data: { validity_days: form.validity_days },
         });
       } else if (quoteType === "letra_caixa") {
         const totalPrintTime = letraCaixaData.pieces.reduce((s, p) => s + p.print_time_hours, 0);
@@ -253,7 +253,7 @@ export default function Quotes() {
           total_cost: costsLC.total,
           base_price: costsLC.base_price,
           final_price: costsLC.final_price,
-          quote_data: letraCaixaData,
+          quote_data: { ...letraCaixaData, validity_days: form.validity_days },
         });
       } else {
         Object.assign(basePayload, {
@@ -263,7 +263,7 @@ export default function Quotes() {
           total_cost: costsFC.total,
           base_price: costsFC.base_price,
           final_price: costsFC.final_price,
-          quote_data: fachadaData,
+          quote_data: { ...fachadaData, validity_days: form.validity_days },
         });
       }
 
@@ -348,7 +348,7 @@ export default function Quotes() {
       has_modeling: q.has_modeling ?? false, modeling_hours: q.modeling_hours ?? 0,
       margin: q.margin ?? 0.3, delivery_days: q.delivery_days ?? 7,
       payment_method: q.payment_method ?? "", shipping_cost: q.shipping_cost ?? 0,
-      discount: q.discount ?? 0,
+      discount: q.discount ?? 0, validity_days: (q.quote_data as any)?.validity_days ?? 15,
     });
     const type = (q.quote_type || "3d_print") as QuoteType;
     setQuoteType(type);
@@ -668,6 +668,8 @@ export default function Quotes() {
     doc.setFont("helvetica", "normal");
     if (quote.delivery_days) { doc.text(`Prazo de entrega: ${quote.delivery_days} dias úteis`, ml, y); y += 6; }
     if (quote.payment_method) { doc.text(`Forma de pagamento: ${quote.payment_method}`, ml, y); y += 6; }
+    const validityDays = (quote.quote_data as any)?.validity_days;
+    if (validityDays) { doc.text(`Validade do orçamento: ${validityDays} dias`, ml, y); y += 6; }
 
     // ════════════════════════════════════════
     // NOTES
@@ -914,7 +916,10 @@ export default function Quotes() {
                       <div className="space-y-2"><Label>Frete (R$)</Label><Input type="number" min={0} step={0.01} value={form.shipping_cost} onChange={(e) => setForm({ ...form, shipping_cost: +e.target.value })} /></div>
                       <div className="space-y-2"><Label>Prazo (dias)</Label><Input type="number" min={1} value={form.delivery_days} onChange={(e) => setForm({ ...form, delivery_days: +e.target.value })} /></div>
                     </div>
-                    <div className="space-y-2"><Label>Pagamento</Label><Input value={form.payment_method} onChange={(e) => setForm({ ...form, payment_method: e.target.value })} placeholder="PIX, cartão..." /></div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2"><Label>Validade (dias)</Label><Input type="number" min={1} value={form.validity_days} onChange={(e) => setForm({ ...form, validity_days: +e.target.value })} /></div>
+                      <div className="space-y-2"><Label>Pagamento</Label><Input value={form.payment_method} onChange={(e) => setForm({ ...form, payment_method: e.target.value })} placeholder="PIX, cartão..." /></div>
+                    </div>
                   </div>
                 </div>
 

@@ -503,8 +503,6 @@ export default function Quotes() {
       const lcData = (quote as any).quote_data as LetraCaixaData | undefined;
       projectName = lcData?.project_name || quote.piece_name;
     } else if (qType === "fachada_completa") {
-      const fcData = (quote as any).quote_data as FachadaData | undefined;
-      projectMaterial = fcData?.base_material || "—";
     }
 
     doc.text(projectName, ml, y);

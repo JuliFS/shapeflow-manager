@@ -671,14 +671,34 @@ export default function Quotes() {
     if (validityDays) { doc.text(`Validade do orçamento: ${validityDays} dias`, ml, y); y += 6; }
 
     // ════════════════════════════════════════
-    // NOTES
+    // OBSERVATIONS / NOTES
     // ════════════════════════════════════════
+    const observations = (quote.quote_data as any)?.observations || "";
     y += 6;
-    checkPageBreak(16);
+    checkPageBreak(30);
     doc.setDrawColor(210, 218, 228);
     doc.setLineWidth(0.2);
     doc.line(ml, y, mr, y);
     y += 8;
+
+    if (observations) {
+      doc.setFontSize(7);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(140, 150, 165);
+      doc.text("OBSERVAÇÕES", ml, y);
+      y += 6;
+      doc.setFontSize(8);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(80, 90, 105);
+      const obsLines = doc.splitTextToSize(observations, contentW);
+      obsLines.forEach((line: string) => {
+        checkPageBreak(6);
+        doc.text(line, ml, y);
+        y += 5;
+      });
+      y += 4;
+    }
+
     doc.setFontSize(7);
     doc.setFont("helvetica", "italic");
     doc.setTextColor(140, 150, 165);

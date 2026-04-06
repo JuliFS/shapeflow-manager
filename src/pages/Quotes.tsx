@@ -497,7 +497,7 @@ export default function Quotes() {
 
     let projectName = quote.piece_name;
     let projectType = quoteTypeLabels[qType];
-    let projectMaterial = ""; // not shown in PDF anymore
+    
 
     if (qType === "letra_caixa") {
       const lcData = (quote as any).quote_data as LetraCaixaData | undefined;

@@ -668,6 +668,8 @@ export default function Quotes() {
     doc.setFont("helvetica", "normal");
     if (quote.delivery_days) { doc.text(`Prazo de entrega: ${quote.delivery_days} dias úteis`, ml, y); y += 6; }
     if (quote.payment_method) { doc.text(`Forma de pagamento: ${quote.payment_method}`, ml, y); y += 6; }
+    const validityDays = (quote.quote_data as any)?.validity_days;
+    if (validityDays) { doc.text(`Validade do orçamento: ${validityDays} dias`, ml, y); y += 6; }
 
     // ════════════════════════════════════════
     // NOTES

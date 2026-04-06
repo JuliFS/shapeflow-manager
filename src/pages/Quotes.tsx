@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from "react";
+import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCompany } from "@/contexts/CompanyContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -46,6 +47,7 @@ const emptyForm = {
   weight_grams: 0, print_time_hours: 0, finishing: "", post_processing_hours: 0,
   has_modeling: false, modeling_hours: 0, margin: 0.3, delivery_days: 7,
   payment_method: "", shipping_cost: 0, discount: 0, validity_days: 15,
+  observations: "",
 };
 
 export default function Quotes() {
@@ -241,7 +243,7 @@ export default function Quotes() {
           has_modeling: form.has_modeling,
           modeling_hours: form.modeling_hours,
           ...costs3d,
-          quote_data: { validity_days: form.validity_days },
+          quote_data: { validity_days: form.validity_days, observations: form.observations },
         });
       } else if (quoteType === "letra_caixa") {
         const totalPrintTime = letraCaixaData.pieces.reduce((s, p) => s + p.print_time_hours, 0);
@@ -253,7 +255,7 @@ export default function Quotes() {
           total_cost: costsLC.total,
           base_price: costsLC.base_price,
           final_price: costsLC.final_price,
-          quote_data: { ...letraCaixaData, validity_days: form.validity_days },
+          quote_data: { ...letraCaixaData, validity_days: form.validity_days, observations: form.observations },
         });
       } else {
         Object.assign(basePayload, {
@@ -263,7 +265,7 @@ export default function Quotes() {
           total_cost: costsFC.total,
           base_price: costsFC.base_price,
           final_price: costsFC.final_price,
-          quote_data: { ...fachadaData, validity_days: form.validity_days },
+          quote_data: { ...fachadaData, validity_days: form.validity_days, observations: form.observations },
         });
       }
 
@@ -349,6 +351,7 @@ export default function Quotes() {
       margin: q.margin ?? 0.3, delivery_days: q.delivery_days ?? 7,
       payment_method: q.payment_method ?? "", shipping_cost: q.shipping_cost ?? 0,
       discount: q.discount ?? 0, validity_days: (q.quote_data as any)?.validity_days ?? 15,
+      observations: (q.quote_data as any)?.observations ?? "",
     });
     const type = (q.quote_type || "3d_print") as QuoteType;
     setQuoteType(type);
@@ -494,15 +497,12 @@ export default function Quotes() {
 
     let projectName = quote.piece_name;
     let projectType = quoteTypeLabels[qType];
-    let projectMaterial = quote.material_name || "—";
+    
 
     if (qType === "letra_caixa") {
       const lcData = (quote as any).quote_data as LetraCaixaData | undefined;
       projectName = lcData?.project_name || quote.piece_name;
-      projectMaterial = lcData?.pieces?.map(p => p.material_name).filter(Boolean).join(", ") || "—";
     } else if (qType === "fachada_completa") {
-      const fcData = (quote as any).quote_data as FachadaData | undefined;
-      projectMaterial = fcData?.base_material || "—";
     }
 
     doc.text(projectName, ml, y);
@@ -511,7 +511,6 @@ export default function Quotes() {
     doc.setFont("helvetica", "normal");
     doc.setTextColor(80, 90, 105);
     doc.text(`Tipo: ${projectType}`, ml, y);
-    doc.text(`Material: ${projectMaterial}`, ml + 70, y);
 
     // ════════════════════════════════════════
     // DETAILED ITEMS TABLE
@@ -672,14 +671,34 @@ export default function Quotes() {
     if (validityDays) { doc.text(`Validade do orçamento: ${validityDays} dias`, ml, y); y += 6; }
 
     // ════════════════════════════════════════
-    // NOTES
+    // OBSERVATIONS / NOTES
     // ════════════════════════════════════════
+    const observations = (quote.quote_data as any)?.observations || "";
     y += 6;
-    checkPageBreak(16);
+    checkPageBreak(30);
     doc.setDrawColor(210, 218, 228);
     doc.setLineWidth(0.2);
     doc.line(ml, y, mr, y);
     y += 8;
+
+    if (observations) {
+      doc.setFontSize(7);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(140, 150, 165);
+      doc.text("OBSERVAÇÕES", ml, y);
+      y += 6;
+      doc.setFontSize(8);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(80, 90, 105);
+      const obsLines = doc.splitTextToSize(observations, contentW);
+      obsLines.forEach((line: string) => {
+        checkPageBreak(6);
+        doc.text(line, ml, y);
+        y += 5;
+      });
+      y += 4;
+    }
+
     doc.setFontSize(7);
     doc.setFont("helvetica", "italic");
     doc.setTextColor(140, 150, 165);
@@ -919,6 +938,10 @@ export default function Quotes() {
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2"><Label>Validade (dias)</Label><Input type="number" min={1} value={form.validity_days} onChange={(e) => setForm({ ...form, validity_days: +e.target.value })} /></div>
                       <div className="space-y-2"><Label>Pagamento</Label><Input value={form.payment_method} onChange={(e) => setForm({ ...form, payment_method: e.target.value })} placeholder="PIX, cartão..." /></div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Observações</Label>
+                      <Textarea value={form.observations} onChange={(e) => setForm({ ...form, observations: e.target.value })} placeholder="Condições comerciais, informações adicionais..." rows={3} />
                     </div>
                   </div>
                 </div>

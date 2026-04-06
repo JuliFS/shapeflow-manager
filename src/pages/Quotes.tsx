@@ -923,6 +923,10 @@ export default function Quotes() {
                       <div className="space-y-2"><Label>Validade (dias)</Label><Input type="number" min={1} value={form.validity_days} onChange={(e) => setForm({ ...form, validity_days: +e.target.value })} /></div>
                       <div className="space-y-2"><Label>Pagamento</Label><Input value={form.payment_method} onChange={(e) => setForm({ ...form, payment_method: e.target.value })} placeholder="PIX, cartão..." /></div>
                     </div>
+                    <div className="space-y-2">
+                      <Label>Observações</Label>
+                      <Textarea value={form.observations} onChange={(e) => setForm({ ...form, observations: e.target.value })} placeholder="Condições comerciais, informações adicionais..." rows={3} />
+                    </div>
                   </div>
                 </div>
 

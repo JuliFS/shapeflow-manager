@@ -253,7 +253,7 @@ export default function Quotes() {
           total_cost: costsLC.total,
           base_price: costsLC.base_price,
           final_price: costsLC.final_price,
-          quote_data: letraCaixaData,
+          quote_data: { ...letraCaixaData, validity_days: form.validity_days },
         });
       } else {
         Object.assign(basePayload, {

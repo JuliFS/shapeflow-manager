@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -6,8 +7,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
-import { Building2, Users, Shield } from "lucide-react";
+import { Building2, Users, Shield, Search } from "lucide-react";
 
 const planColors: Record<string, string> = {
   free: "bg-muted text-muted-foreground",
@@ -18,6 +21,10 @@ const planColors: Record<string, string> = {
 export default function SuperAdmin() {
   const { user } = useAuth();
   const qc = useQueryClient();
+  const [companySearch, setCompanySearch] = useState("");
+  const [companyPlanFilter, setCompanyPlanFilter] = useState("all");
+  const [userSearch, setUserSearch] = useState("");
+  const [userStatusFilter, setUserStatusFilter] = useState("all");
 
   const { data: isSuperAdmin, isLoading: checkingAdmin } = useQuery({
     queryKey: ["is_super_admin", user?.id],
@@ -104,6 +111,18 @@ export default function SuperAdmin() {
     onError: (e: any) => toast.error(e.message),
   });
 
+  const toggleUserActive = useMutation({
+    mutationFn: async ({ membershipId, active }: { membershipId: string; active: boolean }) => {
+      const { error } = await supabase.from("user_companies").update({ active }).eq("id", membershipId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["all_memberships"] });
+      toast.success("Status do usuário atualizado!");
+    },
+    onError: (e: any) => toast.error(e.message),
+  });
+
   if (checkingAdmin) {
     return <div className="flex items-center justify-center min-h-[400px] text-muted-foreground">Verificando permissões...</div>;
   }
@@ -124,7 +143,6 @@ export default function SuperAdmin() {
   const getCompanyName = (companyId: string) =>
     companies.find((c: any) => c.id === companyId)?.name ?? "—";
 
-  // Build user rows by joining auth users + memberships
   const userRows = allUsers.map((u) => {
     const membership = allMemberships.find((m: any) => m.user_id === u.id);
     const profile = allProfiles.find((p: any) => p.user_id === u.id);
@@ -134,11 +152,33 @@ export default function SuperAdmin() {
       companyId: membership?.company_id ?? null,
       companyName: membership ? getCompanyName(membership.company_id) : "Sem empresa",
       role: membership?.role ?? "—",
+      active: membership?.active ?? true,
       ownerName: profile?.owner_name ?? "",
     };
   });
 
   const uniqueUsers = new Set(allMemberships.map((m: any) => m.user_id)).size;
+
+  // Filtered companies
+  const filteredCompanies = companies.filter((c: any) => {
+    const matchSearch = c.name.toLowerCase().includes(companySearch.toLowerCase());
+    const matchPlan = companyPlanFilter === "all" || c.plan === companyPlanFilter;
+    return matchSearch && matchPlan;
+  });
+
+  // Filtered users
+  const filteredUsers = userRows.filter((u) => {
+    const searchTerm = userSearch.toLowerCase();
+    const matchSearch =
+      u.email.toLowerCase().includes(searchTerm) ||
+      u.ownerName.toLowerCase().includes(searchTerm) ||
+      u.companyName.toLowerCase().includes(searchTerm);
+    const matchStatus =
+      userStatusFilter === "all" ||
+      (userStatusFilter === "active" && u.active) ||
+      (userStatusFilter === "inactive" && !u.active);
+    return matchSearch && matchStatus;
+  });
 
   return (
     <div className="space-y-6">
@@ -179,7 +219,31 @@ export default function SuperAdmin() {
 
         <TabsContent value="companies">
           <Card>
-            <CardHeader><CardTitle className="text-base">Todas as Empresas</CardTitle></CardHeader>
+            <CardHeader>
+              <CardTitle className="text-base">Todas as Empresas</CardTitle>
+              <div className="flex flex-col sm:flex-row gap-2 pt-2">
+                <div className="relative flex-1">
+                  <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Buscar empresa..."
+                    value={companySearch}
+                    onChange={(e) => setCompanySearch(e.target.value)}
+                    className="pl-8 h-9"
+                  />
+                </div>
+                <Select value={companyPlanFilter} onValueChange={setCompanyPlanFilter}>
+                  <SelectTrigger className="h-9 w-32 text-xs">
+                    <SelectValue placeholder="Plano" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos</SelectItem>
+                    <SelectItem value="free">Free</SelectItem>
+                    <SelectItem value="pro">Pro</SelectItem>
+                    <SelectItem value="studio">Studio</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </CardHeader>
             <CardContent className="p-0">
               <Table>
                 <TableHeader>
@@ -192,7 +256,7 @@ export default function SuperAdmin() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {companies.map((c: any) => (
+                  {filteredCompanies.map((c: any) => (
                     <TableRow key={c.id}>
                       <TableCell className="font-medium">{c.name}</TableCell>
                       <TableCell>{getMemberCount(c.id)}</TableCell>
@@ -218,6 +282,13 @@ export default function SuperAdmin() {
                       </TableCell>
                     </TableRow>
                   ))}
+                  {filteredCompanies.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+                        Nenhuma empresa encontrada.
+                      </TableCell>
+                    </TableRow>
+                  )}
                 </TableBody>
               </Table>
             </CardContent>
@@ -226,7 +297,30 @@ export default function SuperAdmin() {
 
         <TabsContent value="users">
           <Card>
-            <CardHeader><CardTitle className="text-base">Todos os Usuários</CardTitle></CardHeader>
+            <CardHeader>
+              <CardTitle className="text-base">Todos os Usuários</CardTitle>
+              <div className="flex flex-col sm:flex-row gap-2 pt-2">
+                <div className="relative flex-1">
+                  <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Buscar por email, nome ou empresa..."
+                    value={userSearch}
+                    onChange={(e) => setUserSearch(e.target.value)}
+                    className="pl-8 h-9"
+                  />
+                </div>
+                <Select value={userStatusFilter} onValueChange={setUserStatusFilter}>
+                  <SelectTrigger className="h-9 w-32 text-xs">
+                    <SelectValue placeholder="Status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos</SelectItem>
+                    <SelectItem value="active">Ativos</SelectItem>
+                    <SelectItem value="inactive">Inativos</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </CardHeader>
             <CardContent className="p-0">
               <Table>
                 <TableHeader>
@@ -235,18 +329,29 @@ export default function SuperAdmin() {
                     <TableHead>Nome</TableHead>
                     <TableHead>Empresa</TableHead>
                     <TableHead>Role</TableHead>
+                    <TableHead>Ativo</TableHead>
                     <TableHead>Alterar Role</TableHead>
                     <TableHead>Alterar Empresa</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {userRows.map((u) => (
-                    <TableRow key={u.id}>
+                  {filteredUsers.map((u) => (
+                    <TableRow key={u.id} className={!u.active ? "opacity-50" : ""}>
                       <TableCell className="font-medium text-xs">{u.email}</TableCell>
                       <TableCell className="text-sm">{u.ownerName || "—"}</TableCell>
                       <TableCell className="text-sm">{u.companyName}</TableCell>
                       <TableCell>
                         <Badge variant="outline" className="text-xs">{u.role}</Badge>
+                      </TableCell>
+                      <TableCell>
+                        {u.membershipId ? (
+                          <Switch
+                            checked={u.active}
+                            onCheckedChange={(active) =>
+                              toggleUserActive.mutate({ membershipId: u.membershipId!, active })
+                            }
+                          />
+                        ) : <span className="text-xs text-muted-foreground">—</span>}
                       </TableCell>
                       <TableCell>
                         {u.membershipId ? (
@@ -278,6 +383,13 @@ export default function SuperAdmin() {
                       </TableCell>
                     </TableRow>
                   ))}
+                  {filteredUsers.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
+                        Nenhum usuário encontrado.
+                      </TableCell>
+                    </TableRow>
+                  )}
                 </TableBody>
               </Table>
             </CardContent>

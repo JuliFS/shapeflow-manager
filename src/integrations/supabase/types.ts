@@ -831,6 +831,7 @@ export type Database = {
       }
       user_companies: {
         Row: {
+          active: boolean
           company_id: string
           created_at: string
           id: string
@@ -838,6 +839,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          active?: boolean
           company_id: string
           created_at?: string
           id?: string
@@ -845,6 +847,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          active?: boolean
           company_id?: string
           created_at?: string
           id?: string

@@ -99,6 +99,7 @@ export default function Orders() {
                 <TableHead>Status</TableHead>
                 <TableHead className="w-48">Alterar Status</TableHead>
                 <TableHead className="w-12"></TableHead>
+              </TableRow>
             </TableHeader>
             <TableBody>
               {orders.length === 0 ? (

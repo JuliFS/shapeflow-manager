@@ -941,6 +941,7 @@ export type Database = {
         | "post_processing"
         | "finished"
         | "delivered"
+        | "cancelled"
       quote_status: "draft" | "sent" | "approved" | "rejected"
     }
     CompositeTypes: {
@@ -1075,6 +1076,7 @@ export const Constants = {
         "post_processing",
         "finished",
         "delivered",
+        "cancelled",
       ],
       quote_status: ["draft", "sent", "approved", "rejected"],
     },

@@ -20,6 +20,7 @@ const statusLabels: Record<OrderStatus, string> = {
   post_processing: "Pós-processamento",
   finished: "Finalizado",
   delivered: "Entregue",
+  cancelled: "Cancelado",
 };
 
 const statusColors: Record<OrderStatus, string> = {

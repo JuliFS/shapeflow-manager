@@ -29,9 +29,10 @@ const statusColors: Record<OrderStatus, string> = {
   post_processing: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400",
   finished: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
   delivered: "bg-green-200 text-green-800 dark:bg-green-800/40 dark:text-green-300",
+  cancelled: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
 };
 
-const statusOrder: OrderStatus[] = ["queue", "printing", "post_processing", "finished", "delivered"];
+const statusOrder: OrderStatus[] = ["queue", "printing", "post_processing", "finished", "delivered", "cancelled"];
 
 export default function Orders() {
   const { user } = useAuth();

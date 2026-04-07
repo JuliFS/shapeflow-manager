@@ -73,6 +73,17 @@ export default function Orders() {
     },
   });
 
+  const deleteOrder = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("orders").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["orders"] });
+      toast.success("Pedido apagado!");
+    },
+  });
+
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold tracking-tight">Pedidos</h1>

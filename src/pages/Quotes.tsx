@@ -71,6 +71,8 @@ export default function Quotes() {
   const [quoteType, setQuoteType] = useState<QuoteType>("3d_print");
   const [letraCaixaData, setLetraCaixaData] = useState<LetraCaixaData>({ ...emptyLetraCaixa });
   const [fachadaData, setFachadaData] = useState<FachadaData>({ ...emptyFachada });
+  const [complexity, setComplexity] = useState<Complexity>("simples");
+  const [manualMarkup, setManualMarkup] = useState(false);
 
   const { data: clients = [] } = useQuery({
     queryKey: ["clients", currentCompanyId],

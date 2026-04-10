@@ -155,12 +155,10 @@ export default function Quotes() {
 
   // Profit protection check
   const profitInfo = useMemo(() => {
-    const markup = form.margin * 100; // margin is stored as decimal (e.g., 1.0 = 100%)
-    const profitPercent = (markup / (1 + markup / 100)) * 100 / 100;
-    // Simpler: profit = basePrice - cost = cost * margin, so profitPercent = margin / (1 + margin) * 100
+    // profit = margin/(1+margin) as percentage of final price
     const actualProfitPct = (form.margin / (1 + form.margin)) * 100;
     const belowMin = actualProfitPct < minProfitPercent;
-    // Suggested margin to meet min profit: minProfit = margin/(1+margin) => margin = minProfit/(1-minProfit)
+    // Suggested margin to meet min profit: minProfit/(100-minProfit)
     const suggestedMargin = minProfitPercent / (100 - minProfitPercent);
     return { actualProfitPct, belowMin, suggestedMarkup: suggestedMargin * 100 };
   }, [form.margin, minProfitPercent]);

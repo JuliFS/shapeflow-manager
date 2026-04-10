@@ -410,14 +410,38 @@ export default function Quotes() {
   };
 
   const openNew = () => {
-    setForm({ ...emptyForm, margin: profile?.default_margin ?? 0.3 });
+    const defaultMarkup = getBaseMarkup("3d_print");
+    setForm({ ...emptyForm, margin: defaultMarkup / 100 });
     setQuoteType("3d_print");
+    setComplexity("simples");
+    setManualMarkup(false);
     setLetraCaixaData({ ...emptyLetraCaixa });
     setFachadaData({ ...emptyFachada });
     setEditId(null);
     setEditQuoteNumber(null);
     setStlVolume(null);
     setOpen(true);
+  };
+
+  const handleQuoteTypeChange = (t: QuoteType) => {
+    setQuoteType(t);
+    if (!manualMarkup) {
+      const markup = getEffectiveMarkup(t, complexity);
+      setForm((prev) => ({ ...prev, margin: markup / 100 }));
+    }
+  };
+
+  const handleComplexityChange = (c: Complexity) => {
+    setComplexity(c);
+    if (!manualMarkup) {
+      const markup = getEffectiveMarkup(quoteType, c);
+      setForm((prev) => ({ ...prev, margin: markup / 100 }));
+    }
+  };
+
+  const handleManualMarginChange = (value: number) => {
+    setManualMarkup(true);
+    setForm((prev) => ({ ...prev, margin: value / 100 }));
   };
 
   const generatePDF = async (quote: typeof quotes[0]) => {

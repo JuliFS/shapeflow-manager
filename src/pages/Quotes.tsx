@@ -286,7 +286,7 @@ export default function Quotes() {
           has_modeling: form.has_modeling,
           modeling_hours: form.modeling_hours,
           ...costs3d,
-          quote_data: { validity_days: form.validity_days, observations: form.observations },
+          quote_data: { validity_days: form.validity_days, observations: form.observations, complexity },
         });
       } else if (quoteType === "letra_caixa") {
         const totalPrintTime = letraCaixaData.pieces.reduce((s, p) => s + p.print_time_hours, 0);

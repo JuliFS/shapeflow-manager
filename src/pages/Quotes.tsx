@@ -884,7 +884,7 @@ export default function Quotes() {
                       <button
                         key={t}
                         type="button"
-                        onClick={() => setQuoteType(t)}
+                        onClick={() => handleQuoteTypeChange(t)}
                         className={`p-3 rounded-lg border-2 text-sm font-medium transition-all ${
                           quoteType === t
                             ? "border-primary bg-primary/10 text-primary"

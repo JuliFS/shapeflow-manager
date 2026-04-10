@@ -14,7 +14,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
-import { Plus, FileDown, Upload, Pencil, Trash2, Loader2, Box } from "lucide-react";
+import { Plus, FileDown, Upload, Pencil, Trash2, Loader2, Box, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { useLocation } from "react-router-dom";
@@ -42,6 +42,10 @@ const quoteTypeLabels: Record<QuoteType, string> = {
   "fachada_completa": "Fachada Completa",
 };
 
+type Complexity = "simples" | "medio" | "complexo";
+const complexityMultipliers: Record<Complexity, number> = { simples: 1, medio: 1.5, complexo: 2 };
+
+
 const emptyForm = {
   client_id: "", piece_name: "", printer_id: "", material_id: "",
   weight_grams: 0, print_time_hours: 0, finishing: "", post_processing_hours: 0,
@@ -67,6 +71,8 @@ export default function Quotes() {
   const [quoteType, setQuoteType] = useState<QuoteType>("3d_print");
   const [letraCaixaData, setLetraCaixaData] = useState<LetraCaixaData>({ ...emptyLetraCaixa });
   const [fachadaData, setFachadaData] = useState<FachadaData>({ ...emptyFachada });
+  const [complexity, setComplexity] = useState<Complexity>("simples");
+  const [manualMarkup, setManualMarkup] = useState(false);
 
   const { data: clients = [] } = useQuery({
     queryKey: ["clients", currentCompanyId],
@@ -113,6 +119,15 @@ export default function Quotes() {
     enabled: !!currentCompanyId,
   });
 
+  const { data: pricingConfig } = useQuery({
+    queryKey: ["pricing_config", currentCompanyId],
+    queryFn: async () => {
+      const { data } = await supabase.from("pricing_config").select("*").eq("company_id", currentCompanyId!).maybeSingle();
+      return data;
+    },
+    enabled: !!currentCompanyId,
+  });
+
   const monthlyQuoteCount = useMemo(() => {
     const now = new Date();
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
@@ -121,6 +136,32 @@ export default function Quotes() {
 
   const isFreePlan = currentCompany?.plan === "free";
   const quoteLimitReached = isFreePlan && monthlyQuoteCount >= 10;
+
+  // Auto-markup helpers
+  const getBaseMarkup = (type: QuoteType): number => {
+    if (!pricingConfig) {
+      return type === "3d_print" ? 100 : type === "letra_caixa" ? 200 : 300;
+    }
+    const map: Record<QuoteType, string> = { "3d_print": "markup_3d_print", "letra_caixa": "markup_letra_caixa", "fachada_completa": "markup_fachada_completa" };
+    return Number((pricingConfig as any)[map[type]]) || 100;
+  };
+
+  const getEffectiveMarkup = (type: QuoteType, comp: Complexity): number => {
+    const base = getBaseMarkup(type);
+    return base * complexityMultipliers[comp];
+  };
+
+  const minProfitPercent = pricingConfig ? Number((pricingConfig as any).min_profit_percent) : 30;
+
+  // Profit protection check
+  const profitInfo = useMemo(() => {
+    // profit = margin/(1+margin) as percentage of final price
+    const actualProfitPct = (form.margin / (1 + form.margin)) * 100;
+    const belowMin = actualProfitPct < minProfitPercent;
+    // Suggested margin to meet min profit: minProfit/(100-minProfit)
+    const suggestedMargin = minProfitPercent / (100 - minProfitPercent);
+    return { actualProfitPct, belowMin, suggestedMarkup: suggestedMargin * 100 };
+  }, [form.margin, minProfitPercent]);
 
   useEffect(() => {
     const state = location.state as any;
@@ -243,7 +284,7 @@ export default function Quotes() {
           has_modeling: form.has_modeling,
           modeling_hours: form.modeling_hours,
           ...costs3d,
-          quote_data: { validity_days: form.validity_days, observations: form.observations },
+          quote_data: { validity_days: form.validity_days, observations: form.observations, complexity },
         });
       } else if (quoteType === "letra_caixa") {
         const totalPrintTime = letraCaixaData.pieces.reduce((s, p) => s + p.print_time_hours, 0);
@@ -255,7 +296,7 @@ export default function Quotes() {
           total_cost: costsLC.total,
           base_price: costsLC.base_price,
           final_price: costsLC.final_price,
-          quote_data: { ...letraCaixaData, validity_days: form.validity_days, observations: form.observations },
+          quote_data: { ...letraCaixaData, validity_days: form.validity_days, observations: form.observations, complexity },
         });
       } else {
         Object.assign(basePayload, {
@@ -265,7 +306,7 @@ export default function Quotes() {
           total_cost: costsFC.total,
           base_price: costsFC.base_price,
           final_price: costsFC.final_price,
-          quote_data: { ...fachadaData, validity_days: form.validity_days, observations: form.observations },
+          quote_data: { ...fachadaData, validity_days: form.validity_days, observations: form.observations, complexity },
         });
       }
 
@@ -355,6 +396,8 @@ export default function Quotes() {
     });
     const type = (q.quote_type || "3d_print") as QuoteType;
     setQuoteType(type);
+    setComplexity(((q.quote_data as any)?.complexity as Complexity) || "simples");
+    setManualMarkup(true); // preserve existing margin on edit
     if (type === "letra_caixa" && q.quote_data) {
       setLetraCaixaData({ ...emptyLetraCaixa, ...(q.quote_data as any) });
     } else if (type === "fachada_completa" && q.quote_data) {
@@ -367,14 +410,38 @@ export default function Quotes() {
   };
 
   const openNew = () => {
-    setForm({ ...emptyForm, margin: profile?.default_margin ?? 0.3 });
+    const defaultMarkup = getBaseMarkup("3d_print");
+    setForm({ ...emptyForm, margin: defaultMarkup / 100 });
     setQuoteType("3d_print");
+    setComplexity("simples");
+    setManualMarkup(false);
     setLetraCaixaData({ ...emptyLetraCaixa });
     setFachadaData({ ...emptyFachada });
     setEditId(null);
     setEditQuoteNumber(null);
     setStlVolume(null);
     setOpen(true);
+  };
+
+  const handleQuoteTypeChange = (t: QuoteType) => {
+    setQuoteType(t);
+    if (!manualMarkup) {
+      const markup = getEffectiveMarkup(t, complexity);
+      setForm((prev) => ({ ...prev, margin: markup / 100 }));
+    }
+  };
+
+  const handleComplexityChange = (c: Complexity) => {
+    setComplexity(c);
+    if (!manualMarkup) {
+      const markup = getEffectiveMarkup(quoteType, c);
+      setForm((prev) => ({ ...prev, margin: markup / 100 }));
+    }
+  };
+
+  const handleManualMarginChange = (value: number) => {
+    setManualMarkup(true);
+    setForm((prev) => ({ ...prev, margin: value / 100 }));
   };
 
   const generatePDF = async (quote: typeof quotes[0]) => {
@@ -815,7 +882,7 @@ export default function Quotes() {
                       <button
                         key={t}
                         type="button"
-                        onClick={() => setQuoteType(t)}
+                        onClick={() => handleQuoteTypeChange(t)}
                         className={`p-3 rounded-lg border-2 text-sm font-medium transition-all ${
                           quoteType === t
                             ? "border-primary bg-primary/10 text-primary"
@@ -925,12 +992,66 @@ export default function Quotes() {
                     <FachadaCompletaForm data={fachadaData} onChange={setFachadaData} />
                   )}
 
-                  {/* Common: margin, discount, shipping, delivery, payment */}
+                  {/* Common: complexity, margin, discount, shipping, delivery, payment */}
                   <div className="border-t border-border pt-4 space-y-4">
+                    {/* Complexity selector */}
+                    <div className="space-y-2">
+                      <Label className="text-sm font-semibold">Complexidade do Projeto</Label>
+                      <div className="grid grid-cols-3 gap-2">
+                        {(["simples", "medio", "complexo"] as Complexity[]).map((c) => (
+                          <button
+                            key={c}
+                            type="button"
+                            onClick={() => handleComplexityChange(c)}
+                            className={`p-2 rounded-lg border-2 text-xs font-medium transition-all ${
+                              complexity === c
+                                ? "border-primary bg-primary/10 text-primary"
+                                : "border-border bg-card text-muted-foreground hover:border-primary/40"
+                            }`}
+                          >
+                            {c === "simples" && "⚡ Simples"}
+                            {c === "medio" && "⚙️ Médio"}
+                            {c === "complexo" && "🔧 Complexo"}
+                          </button>
+                        ))}
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Markup automático: {getEffectiveMarkup(quoteType, complexity).toFixed(0)}% (base {getBaseMarkup(quoteType)}% × {complexityMultipliers[complexity]}x)
+                      </p>
+                    </div>
+
                     <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2"><Label>Margem (%)</Label><Input type="number" min={0} max={500} step={1} value={form.margin * 100} onChange={(e) => setForm({ ...form, margin: +e.target.value / 100 })} /></div>
+                      <div className="space-y-2">
+                        <Label>Markup (%) {manualMarkup && <span className="text-xs text-amber-500 ml-1">✏️ manual</span>}</Label>
+                        <Input type="number" min={0} max={1000} step={1} value={(form.margin * 100).toFixed(0)} onChange={(e) => handleManualMarginChange(+e.target.value)} />
+                        {manualMarkup && (
+                          <button type="button" className="text-xs text-primary hover:underline" onClick={() => { setManualMarkup(false); setForm((prev) => ({ ...prev, margin: getEffectiveMarkup(quoteType, complexity) / 100 })); }}>
+                            ↩ Restaurar automático
+                          </button>
+                        )}
+                      </div>
                       <div className="space-y-2"><Label>Desconto (R$)</Label><Input type="number" min={0} step={0.01} value={form.discount} onChange={(e) => setForm({ ...form, discount: +e.target.value })} /></div>
                     </div>
+
+                    {/* Profit protection alert */}
+                    {profitInfo.belowMin && currentTotalCost > 0 && (
+                      <div className="rounded-lg border-2 border-amber-500/50 bg-amber-50 dark:bg-amber-950/30 p-3 space-y-1">
+                        <p className="text-sm font-semibold text-amber-700 dark:text-amber-400 flex items-center gap-2">
+                          <AlertTriangle className="h-4 w-4" /> Lucro abaixo do mínimo!
+                        </p>
+                        <p className="text-xs text-amber-600 dark:text-amber-300">
+                          Lucro estimado: {profitInfo.actualProfitPct.toFixed(1)}% (mínimo: {minProfitPercent}%)
+                        </p>
+                        <button
+                          type="button"
+                          className="text-xs font-medium text-primary hover:underline"
+                          onClick={() => { setManualMarkup(false); setForm((prev) => ({ ...prev, margin: profitInfo.suggestedMarkup / 100 })); }}
+                        >
+                          Aplicar markup sugerido: {profitInfo.suggestedMarkup.toFixed(0)}%
+                        </button>
+                      </div>
+                    )}
+
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2"><Label>Frete (R$)</Label><Input type="number" min={0} step={0.01} value={form.shipping_cost} onChange={(e) => setForm({ ...form, shipping_cost: +e.target.value })} /></div>
                       <div className="space-y-2"><Label>Prazo (dias)</Label><Input type="number" min={1} value={form.delivery_days} onChange={(e) => setForm({ ...form, delivery_days: +e.target.value })} /></div>
@@ -953,10 +1074,16 @@ export default function Quotes() {
                       <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-3">Detalhamento de Custos (interno)</p>
                       {renderCostBreakdown()}
                       <div className="border-t border-border pt-2 flex justify-between font-medium"><span>Custo Total</span><span>R$ {currentTotalCost.toFixed(2)}</span></div>
-                      <div className="flex justify-between text-muted-foreground"><span>Margem ({(form.margin * 100).toFixed(0)}%)</span><span>R$ {(currentBasePrice - currentTotalCost).toFixed(2)}</span></div>
+                      <div className="flex justify-between text-muted-foreground"><span>Markup ({(form.margin * 100).toFixed(0)}%)</span><span>R$ {(currentBasePrice - currentTotalCost).toFixed(2)}</span></div>
                       <div className="flex justify-between"><span>Preço Base</span><span>R$ {currentBasePrice.toFixed(2)}</span></div>
-                      {form.discount > 0 && <div className="flex justify-between text-green-600"><span>Desconto</span><span>- R$ {form.discount.toFixed(2)}</span></div>}
+                      {form.discount > 0 && <div className="flex justify-between text-green-600 dark:text-green-400"><span>Desconto</span><span>- R$ {form.discount.toFixed(2)}</span></div>}
                       {form.shipping_cost > 0 && <div className="flex justify-between"><span>Frete</span><span>+ R$ {form.shipping_cost.toFixed(2)}</span></div>}
+                      <div className="border-t border-border pt-2 flex justify-between font-medium text-muted-foreground">
+                        <span>Lucro estimado</span>
+                        <span className={profitInfo.belowMin && currentTotalCost > 0 ? "text-amber-600 dark:text-amber-400 font-bold" : ""}>
+                          {profitInfo.actualProfitPct.toFixed(1)}%
+                        </span>
+                      </div>
                       <div className="border-t-2 border-primary/30 pt-3 flex justify-between font-bold text-lg text-primary">
                         <span>Preço Final</span><span>R$ {currentFinalPrice.toFixed(2)}</span>
                       </div>

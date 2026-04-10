@@ -423,6 +423,101 @@ function ProfileTab() {
   );
 }
 
+function PricingTab() {
+  const { user } = useAuth();
+  const { currentCompanyId } = useCompany();
+  const qc = useQueryClient();
+
+  const { data: config, isLoading } = useQuery({
+    queryKey: ["pricing_config", currentCompanyId],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("pricing_config")
+        .select("*")
+        .eq("company_id", currentCompanyId!)
+        .maybeSingle();
+      return data;
+    },
+    enabled: !!currentCompanyId,
+  });
+
+  const [form, setForm] = useState({
+    markup_3d_print: 100,
+    markup_letra_caixa: 200,
+    markup_fachada_completa: 300,
+    min_profit_percent: 30,
+  });
+  const [loaded, setLoaded] = useState(false);
+
+  if (config && !loaded) {
+    setForm({
+      markup_3d_print: Number(config.markup_3d_print),
+      markup_letra_caixa: Number(config.markup_letra_caixa),
+      markup_fachada_completa: Number(config.markup_fachada_completa),
+      min_profit_percent: Number(config.min_profit_percent),
+    });
+    setLoaded(true);
+  }
+
+  const save = useMutation({
+    mutationFn: async () => {
+      if (config) {
+        const { error } = await supabase.from("pricing_config").update(form).eq("id", config.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from("pricing_config").insert({
+          company_id: currentCompanyId!,
+          ...form,
+        } as any);
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["pricing_config"] });
+      toast.success("Configurações de precificação salvas!");
+    },
+    onError: (e: any) => toast.error(e.message),
+  });
+
+  if (isLoading) return <p className="text-muted-foreground">Carregando...</p>;
+
+  return (
+    <Card>
+      <CardHeader><CardTitle>Precificação Automática</CardTitle></CardHeader>
+      <CardContent>
+        <form onSubmit={(e) => { e.preventDefault(); save.mutate(); }} className="space-y-6 max-w-lg">
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">Configure o markup padrão por tipo de projeto. Esses valores serão aplicados automaticamente ao criar novos orçamentos.</p>
+            <div className="space-y-3">
+              <div className="space-y-2">
+                <Label>🖨️ Impressão 3D — Markup (%)</Label>
+                <Input type="number" min={0} max={1000} value={form.markup_3d_print} onChange={(e) => setForm({ ...form, markup_3d_print: +e.target.value })} />
+              </div>
+              <div className="space-y-2">
+                <Label>🔤 Letra Caixa — Markup (%)</Label>
+                <Input type="number" min={0} max={1000} value={form.markup_letra_caixa} onChange={(e) => setForm({ ...form, markup_letra_caixa: +e.target.value })} />
+              </div>
+              <div className="space-y-2">
+                <Label>🏢 Fachada Completa — Markup (%)</Label>
+                <Input type="number" min={0} max={1000} value={form.markup_fachada_completa} onChange={(e) => setForm({ ...form, markup_fachada_completa: +e.target.value })} />
+              </div>
+            </div>
+          </div>
+          <div className="border-t border-border pt-4 space-y-3">
+            <p className="text-sm font-semibold">Proteção contra Prejuízo</p>
+            <p className="text-xs text-muted-foreground">Se o markup aplicado gerar lucro menor que o mínimo, um alerta será exibido e o markup será ajustado automaticamente.</p>
+            <div className="space-y-2">
+              <Label>Lucro Mínimo (%)</Label>
+              <Input type="number" min={0} max={500} value={form.min_profit_percent} onChange={(e) => setForm({ ...form, min_profit_percent: +e.target.value })} />
+            </div>
+          </div>
+          <Button type="submit" disabled={save.isPending}>{save.isPending ? "Salvando..." : "Salvar Configurações"}</Button>
+        </form>
+      </CardContent>
+    </Card>
+  );
+}
+
 function CompanyPlanTab() {
   const { currentCompany } = useCompany();
 
@@ -660,8 +755,9 @@ export default function SettingsPage() {
     <div className="space-y-6">
       <h1 className="text-2xl font-bold tracking-tight">Configurações</h1>
       <Tabs defaultValue="profile">
-        <TabsList>
+        <TabsList className="flex-wrap">
           <TabsTrigger value="profile">Perfil</TabsTrigger>
+          <TabsTrigger value="pricing">Precificação</TabsTrigger>
           <TabsTrigger value="printers">Impressoras</TabsTrigger>
           <TabsTrigger value="materials">Materiais</TabsTrigger>
           <TabsTrigger value="software">Softwares</TabsTrigger>
@@ -669,6 +765,7 @@ export default function SettingsPage() {
           <TabsTrigger value="plan">Plano</TabsTrigger>
         </TabsList>
         <TabsContent value="profile" className="mt-4"><ProfileTab /></TabsContent>
+        <TabsContent value="pricing" className="mt-4"><PricingTab /></TabsContent>
         <TabsContent value="printers" className="mt-4"><PrintersTab /></TabsContent>
         <TabsContent value="materials" className="mt-4"><MaterialsTab /></TabsContent>
         <TabsContent value="software" className="mt-4"><SoftwareTab /></TabsContent>

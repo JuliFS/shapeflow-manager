@@ -137,6 +137,34 @@ export default function Quotes() {
   const isFreePlan = currentCompany?.plan === "free";
   const quoteLimitReached = isFreePlan && monthlyQuoteCount >= 10;
 
+  // Auto-markup helpers
+  const getBaseMarkup = (type: QuoteType): number => {
+    if (!pricingConfig) {
+      return type === "3d_print" ? 100 : type === "letra_caixa" ? 200 : 300;
+    }
+    const map: Record<QuoteType, string> = { "3d_print": "markup_3d_print", "letra_caixa": "markup_letra_caixa", "fachada_completa": "markup_fachada_completa" };
+    return Number((pricingConfig as any)[map[type]]) || 100;
+  };
+
+  const getEffectiveMarkup = (type: QuoteType, comp: Complexity): number => {
+    const base = getBaseMarkup(type);
+    return base * complexityMultiplier[comp];
+  };
+
+  const minProfitPercent = pricingConfig ? Number((pricingConfig as any).min_profit_percent) : 30;
+
+  // Profit protection check
+  const profitInfo = useMemo(() => {
+    const markup = form.margin * 100; // margin is stored as decimal (e.g., 1.0 = 100%)
+    const profitPercent = (markup / (1 + markup / 100)) * 100 / 100;
+    // Simpler: profit = basePrice - cost = cost * margin, so profitPercent = margin / (1 + margin) * 100
+    const actualProfitPct = (form.margin / (1 + form.margin)) * 100;
+    const belowMin = actualProfitPct < minProfitPercent;
+    // Suggested margin to meet min profit: minProfit = margin/(1+margin) => margin = minProfit/(1-minProfit)
+    const suggestedMargin = minProfitPercent / (100 - minProfitPercent);
+    return { actualProfitPct, belowMin, suggestedMarkup: suggestedMargin * 100 };
+  }, [form.margin, minProfitPercent]);
+
   useEffect(() => {
     const state = location.state as any;
     if (state?.fromPart) {

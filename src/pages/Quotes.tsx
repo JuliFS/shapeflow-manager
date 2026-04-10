@@ -398,6 +398,8 @@ export default function Quotes() {
     });
     const type = (q.quote_type || "3d_print") as QuoteType;
     setQuoteType(type);
+    setComplexity(((q.quote_data as any)?.complexity as Complexity) || "simples");
+    setManualMarkup(true); // preserve existing margin on edit
     if (type === "letra_caixa" && q.quote_data) {
       setLetraCaixaData({ ...emptyLetraCaixa, ...(q.quote_data as any) });
     } else if (type === "fachada_completa" && q.quote_data) {

@@ -439,6 +439,47 @@ export type Database = {
           },
         ]
       }
+      pricing_config: {
+        Row: {
+          company_id: string
+          created_at: string
+          id: string
+          markup_3d_print: number
+          markup_fachada_completa: number
+          markup_letra_caixa: number
+          min_profit_percent: number
+          updated_at: string
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          id?: string
+          markup_3d_print?: number
+          markup_fachada_completa?: number
+          markup_letra_caixa?: number
+          min_profit_percent?: number
+          updated_at?: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          id?: string
+          markup_3d_print?: number
+          markup_fachada_completa?: number
+          markup_letra_caixa?: number
+          min_profit_percent?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pricing_config_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: true
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       printers: {
         Row: {
           company_id: string | null

@@ -42,6 +42,10 @@ const quoteTypeLabels: Record<QuoteType, string> = {
   "fachada_completa": "Fachada Completa",
 };
 
+type Complexity = "simples" | "medio" | "complexo";
+const complexityLabels: Record<Complexity, string> = { simples: "Simples", medio: "Médio", complexo: "Complexo" };
+const complexityMultiplier: Record<Complexity, number> = { simples: 1, medio: 1.5, complexo: 2 };
+
 const emptyForm = {
   client_id: "", piece_name: "", printer_id: "", material_id: "",
   weight_grams: 0, print_time_hours: 0, finishing: "", post_processing_hours: 0,

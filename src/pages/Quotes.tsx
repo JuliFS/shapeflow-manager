@@ -298,7 +298,7 @@ export default function Quotes() {
           total_cost: costsLC.total,
           base_price: costsLC.base_price,
           final_price: costsLC.final_price,
-          quote_data: { ...letraCaixaData, validity_days: form.validity_days, observations: form.observations },
+          quote_data: { ...letraCaixaData, validity_days: form.validity_days, observations: form.observations, complexity },
         });
       } else {
         Object.assign(basePayload, {
@@ -308,7 +308,7 @@ export default function Quotes() {
           total_cost: costsFC.total,
           base_price: costsFC.base_price,
           final_price: costsFC.final_price,
-          quote_data: { ...fachadaData, validity_days: form.validity_days, observations: form.observations },
+          quote_data: { ...fachadaData, validity_days: form.validity_days, observations: form.observations, complexity },
         });
       }
 

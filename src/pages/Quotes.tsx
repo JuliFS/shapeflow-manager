@@ -148,7 +148,7 @@ export default function Quotes() {
 
   const getEffectiveMarkup = (type: QuoteType, comp: Complexity): number => {
     const base = getBaseMarkup(type);
-    return base * complexityMultiplier[comp];
+    return base * complexityMultipliers[comp];
   };
 
   const minProfitPercent = pricingConfig ? Number((pricingConfig as any).min_profit_percent) : 30;
@@ -1018,7 +1018,7 @@ export default function Quotes() {
                         ))}
                       </div>
                       <p className="text-xs text-muted-foreground">
-                        Markup automático: {getEffectiveMarkup(quoteType, complexity).toFixed(0)}% (base {getBaseMarkup(quoteType)}% × {complexityMultiplier[complexity]}x)
+                        Markup automático: {getEffectiveMarkup(quoteType, complexity).toFixed(0)}% (base {getBaseMarkup(quoteType)}% × {complexityMultipliers[complexity]}x)
                       </p>
                     </div>
 

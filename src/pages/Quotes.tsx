@@ -119,6 +119,15 @@ export default function Quotes() {
     enabled: !!currentCompanyId,
   });
 
+  const { data: pricingConfig } = useQuery({
+    queryKey: ["pricing_config", currentCompanyId],
+    queryFn: async () => {
+      const { data } = await supabase.from("pricing_config").select("*").eq("company_id", currentCompanyId!).maybeSingle();
+      return data;
+    },
+    enabled: !!currentCompanyId,
+  });
+
   const monthlyQuoteCount = useMemo(() => {
     const now = new Date();
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();

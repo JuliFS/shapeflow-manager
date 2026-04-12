@@ -812,6 +812,8 @@ export default function Quotes() {
           {form.has_modeling && <div className="flex justify-between"><span className="text-muted-foreground">Modelagem</span><span>R$ {costs3d.modeling_cost.toFixed(2)}</span></div>}
           <div className="flex justify-between text-xs text-muted-foreground"><span>Custo Base (antes falha)</span><span>R$ {costs3d.base_cost.toFixed(2)}</span></div>
           <div className="flex justify-between"><span className="text-muted-foreground">Taxa de Falha ({form.failure_rate}%)</span><span>+ R$ {(costs3d.total_cost - costs3d.base_cost).toFixed(2)}</span></div>
+        </>
+      );
     }
     if (quoteType === "letra_caixa") {
       return (

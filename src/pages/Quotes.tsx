@@ -52,6 +52,11 @@ const emptyForm = {
   has_modeling: false, modeling_hours: 0, margin: 0.3, delivery_days: 7,
   payment_method: "", shipping_cost: 0, discount: 0, validity_days: 15,
   observations: "",
+  // 3D print advanced fields
+  energy_kwh_rate: 0.80,
+  energy_consumption_kwh: 0.12,
+  failure_rate: 10,
+  labor_cost_manual: 0,
 };
 
 export default function Quotes() {

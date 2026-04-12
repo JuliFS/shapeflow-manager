@@ -959,11 +959,16 @@ export default function Quotes() {
                           </Select>
                         </div>
                         <div className="space-y-2">
-                          <Label>Material</Label>
+                          <Label>Material (Filamento)</Label>
                           <Select value={form.material_id} onValueChange={(v) => setForm({ ...form, material_id: v })}>
                             <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                            <SelectContent>{materials.map((m) => <SelectItem key={m.id} value={m.id}>{m.name} - {m.color}</SelectItem>)}</SelectContent>
+                            <SelectContent>{materials.map((m) => <SelectItem key={m.id} value={m.id}>{m.name}{m.color ? ` - ${m.color}` : ""} (R$ {m.cost_per_kg.toFixed(2)}/kg)</SelectItem>)}</SelectContent>
                           </Select>
+                          {selectedMaterial && (
+                            <p className="text-xs text-muted-foreground">
+                              Custo: R$ {selectedMaterial.cost_per_kg.toFixed(2)}/kg → R$ {(selectedMaterial.cost_per_kg / 1000).toFixed(4)}/g
+                            </p>
+                          )}
                         </div>
                       </div>
 
@@ -971,6 +976,33 @@ export default function Quotes() {
                         <div className="space-y-2"><Label>Peso (g)</Label><Input type="number" min={0} step={0.1} value={form.weight_grams} onChange={(e) => setForm({ ...form, weight_grams: +e.target.value })} /></div>
                         <div className="space-y-2"><Label>Tempo Impressão (h)</Label><Input type="number" min={0} step={0.1} value={form.print_time_hours} onChange={(e) => setForm({ ...form, print_time_hours: +e.target.value })} /></div>
                         <div className="space-y-2"><Label>Pós-processamento (h)</Label><Input type="number" min={0} step={0.1} value={form.post_processing_hours} onChange={(e) => setForm({ ...form, post_processing_hours: +e.target.value })} /></div>
+                      </div>
+
+                      {/* Energy */}
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label>Consumo médio (kWh)</Label>
+                          <Input type="number" min={0} step={0.01} value={form.energy_consumption_kwh} onChange={(e) => setForm({ ...form, energy_consumption_kwh: +e.target.value })} />
+                          <p className="text-xs text-muted-foreground">Padrão: 0.12 kWh</p>
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Valor do kWh (R$)</Label>
+                          <Input type="number" min={0} step={0.01} value={form.energy_kwh_rate} onChange={(e) => setForm({ ...form, energy_kwh_rate: +e.target.value })} />
+                        </div>
+                      </div>
+
+                      {/* Failure rate & Manual labor */}
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label>Taxa de Falha (%)</Label>
+                          <Input type="number" min={0} max={100} step={1} value={form.failure_rate} onChange={(e) => setForm({ ...form, failure_rate: +e.target.value })} />
+                          <p className="text-xs text-muted-foreground">Padrão: 10%. Aplicado ao custo base.</p>
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Mão de Obra Manual (R$)</Label>
+                          <Input type="number" min={0} step={0.01} value={form.labor_cost_manual} onChange={(e) => setForm({ ...form, labor_cost_manual: +e.target.value })} />
+                          <p className="text-xs text-muted-foreground">Custo extra por peça</p>
+                        </div>
                       </div>
 
                       <div className="space-y-2">

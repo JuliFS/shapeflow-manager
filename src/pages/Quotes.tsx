@@ -52,6 +52,11 @@ const emptyForm = {
   has_modeling: false, modeling_hours: 0, margin: 0.3, delivery_days: 7,
   payment_method: "", shipping_cost: 0, discount: 0, validity_days: 15,
   observations: "",
+  // 3D print advanced fields
+  energy_kwh_rate: 0.80,
+  energy_consumption_kwh: 0.12,
+  failure_rate: 10,
+  labor_cost_manual: 0,
 };
 
 export default function Quotes() {
@@ -196,13 +201,15 @@ export default function Quotes() {
 
     const material_cost = form.weight_grams * costPerGram;
     const machine_cost = form.print_time_hours * machineRate;
-    const labor_cost = form.post_processing_hours * hourlyRate;
+    const energy_cost = form.energy_consumption_kwh * form.print_time_hours * form.energy_kwh_rate;
+    const labor_cost = form.post_processing_hours * hourlyRate + form.labor_cost_manual;
     const modeling_cost = form.has_modeling ? form.modeling_hours * modelingRate : 0;
-    const total_cost = material_cost + machine_cost + labor_cost + modeling_cost;
+    const base_cost = material_cost + machine_cost + energy_cost + labor_cost + modeling_cost;
+    const total_cost = base_cost * (1 + form.failure_rate / 100);
     const base_price = total_cost * (1 + form.margin);
     const final_price = base_price - form.discount + form.shipping_cost;
 
-    return { material_cost, machine_cost, labor_cost, modeling_cost, total_cost, base_price, final_price };
+    return { material_cost, machine_cost, energy_cost, labor_cost, modeling_cost, base_cost, total_cost, base_price, final_price };
   }, [form, selectedPrinter, selectedMaterial, profile]);
 
   // Letra Caixa costs
@@ -284,7 +291,12 @@ export default function Quotes() {
           has_modeling: form.has_modeling,
           modeling_hours: form.modeling_hours,
           ...costs3d,
-          quote_data: { validity_days: form.validity_days, observations: form.observations, complexity },
+          quote_data: {
+            validity_days: form.validity_days, observations: form.observations, complexity,
+            energy_kwh_rate: form.energy_kwh_rate, energy_consumption_kwh: form.energy_consumption_kwh,
+            failure_rate: form.failure_rate, labor_cost_manual: form.labor_cost_manual,
+            energy_cost: costs3d.energy_cost, base_cost: costs3d.base_cost,
+          },
         });
       } else if (quoteType === "letra_caixa") {
         const totalPrintTime = letraCaixaData.pieces.reduce((s, p) => s + p.print_time_hours, 0);
@@ -393,6 +405,10 @@ export default function Quotes() {
       payment_method: q.payment_method ?? "", shipping_cost: q.shipping_cost ?? 0,
       discount: q.discount ?? 0, validity_days: (q.quote_data as any)?.validity_days ?? 15,
       observations: (q.quote_data as any)?.observations ?? "",
+      energy_kwh_rate: (q.quote_data as any)?.energy_kwh_rate ?? 0.80,
+      energy_consumption_kwh: (q.quote_data as any)?.energy_consumption_kwh ?? 0.12,
+      failure_rate: (q.quote_data as any)?.failure_rate ?? 10,
+      labor_cost_manual: (q.quote_data as any)?.labor_cost_manual ?? 0,
     });
     const type = (q.quote_type || "3d_print") as QuoteType;
     setQuoteType(type);
@@ -794,10 +810,13 @@ export default function Quotes() {
     if (quoteType === "3d_print") {
       return (
         <>
-          <div className="flex justify-between"><span className="text-muted-foreground">Custo Material</span><span>R$ {costs3d.material_cost.toFixed(2)}</span></div>
-          <div className="flex justify-between"><span className="text-muted-foreground">Custo Máquina</span><span>R$ {costs3d.machine_cost.toFixed(2)}</span></div>
-          <div className="flex justify-between"><span className="text-muted-foreground">Custo Trabalho</span><span>R$ {costs3d.labor_cost.toFixed(2)}</span></div>
-          {form.has_modeling && <div className="flex justify-between"><span className="text-muted-foreground">Custo Modelagem</span><span>R$ {costs3d.modeling_cost.toFixed(2)}</span></div>}
+          <div className="flex justify-between"><span className="text-muted-foreground">Material ({form.weight_grams}g × R$ {selectedMaterial ? (selectedMaterial.cost_per_kg / 1000).toFixed(4) : "0"}/g)</span><span>R$ {costs3d.material_cost.toFixed(2)}</span></div>
+          <div className="flex justify-between"><span className="text-muted-foreground">Máquina ({form.print_time_hours}h × R$ {selectedPrinter?.cost_per_hour?.toFixed(2) ?? "0"}/h)</span><span>R$ {costs3d.machine_cost.toFixed(2)}</span></div>
+          <div className="flex justify-between"><span className="text-muted-foreground">Energia ({form.energy_consumption_kwh} kWh × {form.print_time_hours}h × R$ {form.energy_kwh_rate})</span><span>R$ {costs3d.energy_cost.toFixed(2)}</span></div>
+          <div className="flex justify-between"><span className="text-muted-foreground">Mão de Obra</span><span>R$ {costs3d.labor_cost.toFixed(2)}</span></div>
+          {form.has_modeling && <div className="flex justify-between"><span className="text-muted-foreground">Modelagem</span><span>R$ {costs3d.modeling_cost.toFixed(2)}</span></div>}
+          <div className="flex justify-between text-xs text-muted-foreground"><span>Custo Base (antes falha)</span><span>R$ {costs3d.base_cost.toFixed(2)}</span></div>
+          <div className="flex justify-between"><span className="text-muted-foreground">Taxa de Falha ({form.failure_rate}%)</span><span>+ R$ {(costs3d.total_cost - costs3d.base_cost).toFixed(2)}</span></div>
         </>
       );
     }
@@ -948,11 +967,16 @@ export default function Quotes() {
                           </Select>
                         </div>
                         <div className="space-y-2">
-                          <Label>Material</Label>
+                          <Label>Material (Filamento)</Label>
                           <Select value={form.material_id} onValueChange={(v) => setForm({ ...form, material_id: v })}>
                             <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                            <SelectContent>{materials.map((m) => <SelectItem key={m.id} value={m.id}>{m.name} - {m.color}</SelectItem>)}</SelectContent>
+                            <SelectContent>{materials.map((m) => <SelectItem key={m.id} value={m.id}>{m.name}{m.color ? ` - ${m.color}` : ""} (R$ {m.cost_per_kg.toFixed(2)}/kg)</SelectItem>)}</SelectContent>
                           </Select>
+                          {selectedMaterial && (
+                            <p className="text-xs text-muted-foreground">
+                              Custo: R$ {selectedMaterial.cost_per_kg.toFixed(2)}/kg → R$ {(selectedMaterial.cost_per_kg / 1000).toFixed(4)}/g
+                            </p>
+                          )}
                         </div>
                       </div>
 
@@ -960,6 +984,33 @@ export default function Quotes() {
                         <div className="space-y-2"><Label>Peso (g)</Label><Input type="number" min={0} step={0.1} value={form.weight_grams} onChange={(e) => setForm({ ...form, weight_grams: +e.target.value })} /></div>
                         <div className="space-y-2"><Label>Tempo Impressão (h)</Label><Input type="number" min={0} step={0.1} value={form.print_time_hours} onChange={(e) => setForm({ ...form, print_time_hours: +e.target.value })} /></div>
                         <div className="space-y-2"><Label>Pós-processamento (h)</Label><Input type="number" min={0} step={0.1} value={form.post_processing_hours} onChange={(e) => setForm({ ...form, post_processing_hours: +e.target.value })} /></div>
+                      </div>
+
+                      {/* Energy */}
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label>Consumo médio (kWh)</Label>
+                          <Input type="number" min={0} step={0.01} value={form.energy_consumption_kwh} onChange={(e) => setForm({ ...form, energy_consumption_kwh: +e.target.value })} />
+                          <p className="text-xs text-muted-foreground">Padrão: 0.12 kWh</p>
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Valor do kWh (R$)</Label>
+                          <Input type="number" min={0} step={0.01} value={form.energy_kwh_rate} onChange={(e) => setForm({ ...form, energy_kwh_rate: +e.target.value })} />
+                        </div>
+                      </div>
+
+                      {/* Failure rate & Manual labor */}
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label>Taxa de Falha (%)</Label>
+                          <Input type="number" min={0} max={100} step={1} value={form.failure_rate} onChange={(e) => setForm({ ...form, failure_rate: +e.target.value })} />
+                          <p className="text-xs text-muted-foreground">Padrão: 10%. Aplicado ao custo base.</p>
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Mão de Obra Manual (R$)</Label>
+                          <Input type="number" min={0} step={0.01} value={form.labor_cost_manual} onChange={(e) => setForm({ ...form, labor_cost_manual: +e.target.value })} />
+                          <p className="text-xs text-muted-foreground">Custo extra por peça</p>
+                        </div>
                       </div>
 
                       <div className="space-y-2">

@@ -805,12 +805,13 @@ export default function Quotes() {
     if (quoteType === "3d_print") {
       return (
         <>
-          <div className="flex justify-between"><span className="text-muted-foreground">Custo Material</span><span>R$ {costs3d.material_cost.toFixed(2)}</span></div>
-          <div className="flex justify-between"><span className="text-muted-foreground">Custo Máquina</span><span>R$ {costs3d.machine_cost.toFixed(2)}</span></div>
-          <div className="flex justify-between"><span className="text-muted-foreground">Custo Trabalho</span><span>R$ {costs3d.labor_cost.toFixed(2)}</span></div>
-          {form.has_modeling && <div className="flex justify-between"><span className="text-muted-foreground">Custo Modelagem</span><span>R$ {costs3d.modeling_cost.toFixed(2)}</span></div>}
-        </>
-      );
+          <div className="flex justify-between"><span className="text-muted-foreground">Material ({form.weight_grams}g × R$ {selectedMaterial ? (selectedMaterial.cost_per_kg / 1000).toFixed(4) : "0"}/g)</span><span>R$ {costs3d.material_cost.toFixed(2)}</span></div>
+          <div className="flex justify-between"><span className="text-muted-foreground">Máquina ({form.print_time_hours}h × R$ {selectedPrinter?.cost_per_hour?.toFixed(2) ?? "0"}/h)</span><span>R$ {costs3d.machine_cost.toFixed(2)}</span></div>
+          <div className="flex justify-between"><span className="text-muted-foreground">Energia ({form.energy_consumption_kwh} kWh × {form.print_time_hours}h × R$ {form.energy_kwh_rate})</span><span>R$ {costs3d.energy_cost.toFixed(2)}</span></div>
+          <div className="flex justify-between"><span className="text-muted-foreground">Mão de Obra</span><span>R$ {costs3d.labor_cost.toFixed(2)}</span></div>
+          {form.has_modeling && <div className="flex justify-between"><span className="text-muted-foreground">Modelagem</span><span>R$ {costs3d.modeling_cost.toFixed(2)}</span></div>}
+          <div className="flex justify-between text-xs text-muted-foreground"><span>Custo Base (antes falha)</span><span>R$ {costs3d.base_cost.toFixed(2)}</span></div>
+          <div className="flex justify-between"><span className="text-muted-foreground">Taxa de Falha ({form.failure_rate}%)</span><span>+ R$ {(costs3d.total_cost - costs3d.base_cost).toFixed(2)}</span></div>
     }
     if (quoteType === "letra_caixa") {
       return (

@@ -201,13 +201,15 @@ export default function Quotes() {
 
     const material_cost = form.weight_grams * costPerGram;
     const machine_cost = form.print_time_hours * machineRate;
-    const labor_cost = form.post_processing_hours * hourlyRate;
+    const energy_cost = form.energy_consumption_kwh * form.print_time_hours * form.energy_kwh_rate;
+    const labor_cost = form.post_processing_hours * hourlyRate + form.labor_cost_manual;
     const modeling_cost = form.has_modeling ? form.modeling_hours * modelingRate : 0;
-    const total_cost = material_cost + machine_cost + labor_cost + modeling_cost;
+    const base_cost = material_cost + machine_cost + energy_cost + labor_cost + modeling_cost;
+    const total_cost = base_cost * (1 + form.failure_rate / 100);
     const base_price = total_cost * (1 + form.margin);
     const final_price = base_price - form.discount + form.shipping_cost;
 
-    return { material_cost, machine_cost, labor_cost, modeling_cost, total_cost, base_price, final_price };
+    return { material_cost, machine_cost, energy_cost, labor_cost, modeling_cost, base_cost, total_cost, base_price, final_price };
   }, [form, selectedPrinter, selectedMaterial, profile]);
 
   // Letra Caixa costs

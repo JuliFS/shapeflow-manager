@@ -291,7 +291,12 @@ export default function Quotes() {
           has_modeling: form.has_modeling,
           modeling_hours: form.modeling_hours,
           ...costs3d,
-          quote_data: { validity_days: form.validity_days, observations: form.observations, complexity },
+          quote_data: {
+            validity_days: form.validity_days, observations: form.observations, complexity,
+            energy_kwh_rate: form.energy_kwh_rate, energy_consumption_kwh: form.energy_consumption_kwh,
+            failure_rate: form.failure_rate, labor_cost_manual: form.labor_cost_manual,
+            energy_cost: costs3d.energy_cost, base_cost: costs3d.base_cost,
+          },
         });
       } else if (quoteType === "letra_caixa") {
         const totalPrintTime = letraCaixaData.pieces.reduce((s, p) => s + p.print_time_hours, 0);

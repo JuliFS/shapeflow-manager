@@ -398,6 +398,10 @@ export default function Quotes() {
       payment_method: q.payment_method ?? "", shipping_cost: q.shipping_cost ?? 0,
       discount: q.discount ?? 0, validity_days: (q.quote_data as any)?.validity_days ?? 15,
       observations: (q.quote_data as any)?.observations ?? "",
+      energy_kwh_rate: (q.quote_data as any)?.energy_kwh_rate ?? 0.80,
+      energy_consumption_kwh: (q.quote_data as any)?.energy_consumption_kwh ?? 0.12,
+      failure_rate: (q.quote_data as any)?.failure_rate ?? 10,
+      labor_cost_manual: (q.quote_data as any)?.labor_cost_manual ?? 0,
     });
     const type = (q.quote_type || "3d_print") as QuoteType;
     setQuoteType(type);

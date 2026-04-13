@@ -220,8 +220,8 @@ export default function Quotes() {
       const m = materials.find((mat) => mat.id === id);
       return m ? m.cost_per_kg / 1000 : 0;
     };
-    const getMachineRate = () => {
-      const p = printers[0]; // use first printer as default for LC
+    const getMachineRate = (printerId: string) => {
+      const p = printers.find((pr) => pr.id === printerId) ?? printers[0];
       return p?.cost_per_hour ?? 0;
     };
     const c = calcLetraCaixaCosts(letraCaixaData, hourlyRate, modelingRate, getMaterialCostPerGram, getMachineRate);

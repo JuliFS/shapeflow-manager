@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useRef, useState, useMemo } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -18,22 +18,25 @@ export interface LetraCaixaPiece {
   material_id: string;
   material_name: string;
   stl_volume_cm3: number | null;
+  // 3D print advanced fields per piece
+  printer_id: string;
+  post_processing_hours: number;
+  energy_kwh_rate: number;
+  energy_consumption_kwh: number;
+  failure_rate: number;
+  labor_cost_manual: number;
 }
 
 export interface LetraCaixaData {
-  // Projeto
   project_name: string;
   pieces: LetraCaixaPiece[];
 
-  // Modelagem
   has_modeling: boolean;
   modeling_hours: number;
 
-  // Acrílico
   acrylic_type: string;
   acrylic_cost: number;
 
-  // Iluminação
   led_type: string;
   led_meters: number;
   led_cost_per_meter: number;
@@ -41,19 +44,16 @@ export interface LetraCaixaData {
   power_supply_qty: number;
   power_supply_cost: number;
 
-  // Elétrica
   wires_cost: number;
   connectors_cost: number;
   plugs_cost: number;
 
-  // Instalação
   template_cost: number;
   screws_cost: number;
   spacers_cost: number;
   labor_cost: number;
   travel_cost: number;
 
-  // Acabamento
   painting_cost: number;
   sanding_cost: number;
   polishing_cost: number;
@@ -94,6 +94,12 @@ function createPiece(): LetraCaixaPiece {
     material_id: "",
     material_name: "",
     stl_volume_cm3: null,
+    printer_id: "",
+    post_processing_hours: 0,
+    energy_kwh_rate: 0.80,
+    energy_consumption_kwh: 0.12,
+    failure_rate: 10,
+    labor_cost_manual: 0,
   };
 }
 
@@ -106,41 +112,62 @@ export interface LetraCaixaCosts {
   total: number;
 }
 
+export interface PieceCostBreakdown {
+  material_cost: number;
+  machine_cost: number;
+  energy_cost: number;
+  labor_cost: number;
+  base_cost: number;
+  failure_addition: number;
+  total_cost: number;
+}
+
+export function calcPieceCost(
+  p: LetraCaixaPiece,
+  getMaterialCostPerGram: (id: string) => number,
+  getMachineRate: (printerId: string) => number,
+  hourlyRate: number,
+): PieceCostBreakdown {
+  const material_cost = p.weight_grams * getMaterialCostPerGram(p.material_id);
+  const machine_cost = p.print_time_hours * getMachineRate(p.printer_id);
+  const energy_cost = p.energy_consumption_kwh * p.print_time_hours * p.energy_kwh_rate;
+  const labor_cost = p.post_processing_hours * hourlyRate + p.labor_cost_manual;
+  const base_cost = material_cost + machine_cost + energy_cost + labor_cost;
+  const failure_addition = base_cost * (p.failure_rate / 100);
+  const total_cost = base_cost + failure_addition;
+  return { material_cost, machine_cost, energy_cost, labor_cost, base_cost, failure_addition, total_cost };
+}
+
 export function calcLetraCaixaCosts(
   data: LetraCaixaData,
   hourlyRate: number,
   modelingRate: number,
   getMaterialCostPerGram: (id: string) => number,
-  getMachineRate: () => number
+  getMachineRate: (printerId: string) => number
 ): LetraCaixaCosts {
-  // Printing costs per piece
   let printing = 0;
   for (const p of data.pieces) {
-    const materialCost = p.weight_grams * getMaterialCostPerGram(p.material_id);
-    const machineCost = p.print_time_hours * getMachineRate();
-    const laborCost = p.print_time_hours * hourlyRate * 0.1; // 10% of print time as labor overhead
-    printing += materialCost + machineCost + laborCost;
+    const pc = calcPieceCost(p, getMaterialCostPerGram, getMachineRate, hourlyRate);
+    printing += pc.total_cost;
   }
 
-  // Modeling
   const modeling = data.has_modeling ? data.modeling_hours * modelingRate : 0;
 
-  // Components: acrylic + LED + power + electrical
   const led_total = data.led_meters * data.led_cost_per_meter;
   const power_total = data.power_supply_qty * data.power_supply_cost;
   const electrical = data.wires_cost + data.connectors_cost + data.plugs_cost;
   const components = data.acrylic_cost + led_total + power_total + electrical;
 
-  // Installation
   const installation = data.template_cost + data.screws_cost + data.spacers_cost + data.labor_cost + data.travel_cost;
 
-  // Finishing
   const finishing = data.painting_cost + data.sanding_cost + data.polishing_cost;
 
   const total = printing + modeling + components + installation + finishing;
 
   return { printing, modeling, components, installation, finishing, total };
 }
+
+const fmt = (v: number) => `R$ ${v.toFixed(2)}`;
 
 interface Props {
   data: LetraCaixaData;
@@ -149,7 +176,7 @@ interface Props {
   printers: Array<{ id: string; name: string; cost_per_hour: number | null }>;
 }
 
-export function LetraCaixaForm({ data, onChange, materials, printers: _printers }: Props) {
+export function LetraCaixaForm({ data, onChange, materials, printers }: Props) {
   const [parsingIdx, setParsingIdx] = useState<number | null>(null);
   const stlRefs = useRef<Record<number, HTMLInputElement | null>>({});
 
@@ -218,65 +245,18 @@ export function LetraCaixaForm({ data, onChange, materials, printers: _printers 
         <AccordionTrigger className="text-sm font-semibold">🔤 Peças ({data.pieces.length})</AccordionTrigger>
         <AccordionContent className="space-y-3 pt-2">
           {data.pieces.map((piece, idx) => (
-            <Card key={piece.id} className="border border-border">
-              <CardContent className="pt-3 pb-3 space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold text-muted-foreground">Peça {idx + 1}</span>
-                  <Button type="button" variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => removePiece(idx)}>
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <Label className="text-xs">Nome da Peça</Label>
-                    <Input value={piece.name} onChange={(e) => updatePiece(idx, { name: e.target.value })} placeholder="Ex: Letra A" />
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs">Material</Label>
-                    <Select value={piece.material_id} onValueChange={(v) => {
-                      const mat = materials.find((m) => m.id === v);
-                      updatePiece(idx, { material_id: v, material_name: mat?.name ?? "" });
-                    }}>
-                      <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                      <SelectContent>
-                        {materials.map((m) => (
-                          <SelectItem key={m.id} value={m.id}>{m.name}{m.color ? ` - ${m.color}` : ""}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-
-                {/* STL Upload */}
-                <div className="flex items-center gap-2">
-                  <input
-                    ref={(el) => { stlRefs.current[idx] = el; }}
-                    type="file"
-                    accept=".stl"
-                    className="hidden"
-                    onChange={(e) => e.target.files?.[0] && handleSTL(idx, e.target.files[0])}
-                  />
-                  <Button type="button" variant="outline" size="sm" disabled={parsingIdx === idx} onClick={() => stlRefs.current[idx]?.click()}>
-                    {parsingIdx === idx ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <Upload className="h-3.5 w-3.5 mr-1" />}
-                    {parsingIdx === idx ? "Analisando..." : "Upload STL"}
-                  </Button>
-                  {piece.stl_volume_cm3 !== null && (
-                    <span className="text-xs text-primary font-medium">✓ {piece.stl_volume_cm3.toFixed(1)} cm³</span>
-                  )}
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <Label className="text-xs">Peso (g)</Label>
-                    <Input type="number" min={0} step={0.1} value={piece.weight_grams} onChange={(e) => updatePiece(idx, { weight_grams: +e.target.value })} />
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs">Tempo Impressão (h)</Label>
-                    <Input type="number" min={0} step={0.1} value={piece.print_time_hours} onChange={(e) => updatePiece(idx, { print_time_hours: +e.target.value })} />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+            <PieceCard
+              key={piece.id}
+              piece={piece}
+              idx={idx}
+              materials={materials}
+              printers={printers}
+              parsingIdx={parsingIdx}
+              stlRefs={stlRefs}
+              onUpdate={(patch) => updatePiece(idx, patch)}
+              onRemove={() => removePiece(idx)}
+              onSTL={(file) => handleSTL(idx, file)}
+            />
           ))}
 
           <Button type="button" variant="outline" size="sm" onClick={addPiece} className="w-full">
@@ -379,5 +359,165 @@ export function LetraCaixaForm({ data, onChange, materials, printers: _printers 
         </AccordionContent>
       </AccordionItem>
     </Accordion>
+  );
+}
+
+/* ============ Per-piece card with full 3D print fields ============ */
+
+interface PieceCardProps {
+  piece: LetraCaixaPiece;
+  idx: number;
+  materials: Props["materials"];
+  printers: Props["printers"];
+  parsingIdx: number | null;
+  stlRefs: React.MutableRefObject<Record<number, HTMLInputElement | null>>;
+  onUpdate: (patch: Partial<LetraCaixaPiece>) => void;
+  onRemove: () => void;
+  onSTL: (file: File) => void;
+}
+
+function PieceCard({ piece, idx, materials, printers, parsingIdx, stlRefs, onUpdate, onRemove, onSTL }: PieceCardProps) {
+  const selectedMat = materials.find((m) => m.id === piece.material_id);
+  const selectedPrinter = printers.find((p) => p.id === piece.printer_id);
+  const costPerGram = selectedMat ? selectedMat.cost_per_kg / 1000 : 0;
+
+  const costs = useMemo((): PieceCostBreakdown => {
+    const material_cost = piece.weight_grams * costPerGram;
+    const machine_cost = piece.print_time_hours * (selectedPrinter?.cost_per_hour ?? 0);
+    const energy_cost = piece.energy_consumption_kwh * piece.print_time_hours * piece.energy_kwh_rate;
+    const labor_cost = piece.post_processing_hours * 50 + piece.labor_cost_manual; // uses default hourly rate inline
+    const base_cost = material_cost + machine_cost + energy_cost + labor_cost;
+    const failure_addition = base_cost * (piece.failure_rate / 100);
+    const total_cost = base_cost + failure_addition;
+    return { material_cost, machine_cost, energy_cost, labor_cost, base_cost, failure_addition, total_cost };
+  }, [piece, costPerGram, selectedPrinter]);
+
+  return (
+    <Card className="border border-border">
+      <CardContent className="pt-3 pb-3 space-y-3">
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-semibold text-muted-foreground">Peça {idx + 1}</span>
+          <Button type="button" variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={onRemove}>
+            <Trash2 className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+
+        {/* Nome e Material */}
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1">
+            <Label className="text-xs">Nome da Peça</Label>
+            <Input value={piece.name} onChange={(e) => onUpdate({ name: e.target.value })} placeholder="Ex: Letra A" />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Material</Label>
+            <Select value={piece.material_id} onValueChange={(v) => {
+              const mat = materials.find((m) => m.id === v);
+              onUpdate({ material_id: v, material_name: mat?.name ?? "" });
+            }}>
+              <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+              <SelectContent>
+                {materials.map((m) => (
+                  <SelectItem key={m.id} value={m.id}>{m.name}{m.color ? ` - ${m.color}` : ""}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        {/* Custo/kg info */}
+        {selectedMat && (
+          <div className="text-xs text-muted-foreground">
+            Custo: R$ {selectedMat.cost_per_kg.toFixed(2)}/kg → R$ {costPerGram.toFixed(4)}/g
+          </div>
+        )}
+
+        {/* STL Upload */}
+        <div className="flex items-center gap-2">
+          <input
+            ref={(el) => { stlRefs.current[idx] = el; }}
+            type="file"
+            accept=".stl"
+            className="hidden"
+            onChange={(e) => e.target.files?.[0] && onSTL(e.target.files[0])}
+          />
+          <Button type="button" variant="outline" size="sm" disabled={parsingIdx === idx} onClick={() => stlRefs.current[idx]?.click()}>
+            {parsingIdx === idx ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <Upload className="h-3.5 w-3.5 mr-1" />}
+            {parsingIdx === idx ? "Analisando..." : "Upload STL"}
+          </Button>
+          {piece.stl_volume_cm3 !== null && (
+            <span className="text-xs text-primary font-medium">✓ {piece.stl_volume_cm3.toFixed(1)} cm³</span>
+          )}
+        </div>
+
+        {/* Peso e Tempo */}
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1">
+            <Label className="text-xs">Peso (g)</Label>
+            <Input type="number" min={0} step={0.1} value={piece.weight_grams} onChange={(e) => onUpdate({ weight_grams: +e.target.value })} />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Tempo Impressão (h)</Label>
+            <Input type="number" min={0} step={0.1} value={piece.print_time_hours} onChange={(e) => onUpdate({ print_time_hours: +e.target.value })} />
+          </div>
+        </div>
+
+        {/* Impressora */}
+        <div className="space-y-1">
+          <Label className="text-xs">Impressora</Label>
+          <Select value={piece.printer_id} onValueChange={(v) => onUpdate({ printer_id: v })}>
+            <SelectTrigger><SelectValue placeholder="Selecione impressora" /></SelectTrigger>
+            <SelectContent>
+              {printers.map((p) => (
+                <SelectItem key={p.id} value={p.id}>
+                  {p.name} {p.cost_per_hour ? `(R$ ${p.cost_per_hour}/h)` : ""}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* Energia */}
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1">
+            <Label className="text-xs">Consumo (kWh)</Label>
+            <Input type="number" min={0} step={0.01} value={piece.energy_consumption_kwh} onChange={(e) => onUpdate({ energy_consumption_kwh: +e.target.value })} />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Valor kWh (R$)</Label>
+            <Input type="number" min={0} step={0.01} value={piece.energy_kwh_rate} onChange={(e) => onUpdate({ energy_kwh_rate: +e.target.value })} />
+          </div>
+        </div>
+
+        {/* Taxa de falha e Pós-processamento */}
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1">
+            <Label className="text-xs">Taxa de Falha (%)</Label>
+            <Input type="number" min={0} max={100} step={1} value={piece.failure_rate} onChange={(e) => onUpdate({ failure_rate: +e.target.value })} />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Pós-Processamento (h)</Label>
+            <Input type="number" min={0} step={0.1} value={piece.post_processing_hours} onChange={(e) => onUpdate({ post_processing_hours: +e.target.value })} />
+          </div>
+        </div>
+
+        {/* Mão de Obra Manual */}
+        <div className="space-y-1">
+          <Label className="text-xs">Mão de Obra Manual (R$)</Label>
+          <Input type="number" min={0} step={0.01} value={piece.labor_cost_manual} onChange={(e) => onUpdate({ labor_cost_manual: +e.target.value })} />
+        </div>
+
+        {/* Breakdown de custo */}
+        <div className="bg-muted/50 rounded-md p-2 space-y-1 text-xs">
+          <div className="font-semibold text-foreground mb-1">Custo da Peça</div>
+          <div className="flex justify-between"><span>Material</span><span>{fmt(costs.material_cost)}</span></div>
+          <div className="flex justify-between"><span>Máquina</span><span>{fmt(costs.machine_cost)}</span></div>
+          <div className="flex justify-between"><span>Energia</span><span>{fmt(costs.energy_cost)}</span></div>
+          <div className="flex justify-between"><span>Mão de Obra</span><span>{fmt(costs.labor_cost)}</span></div>
+          <div className="flex justify-between border-t border-border pt-1"><span>Base</span><span>{fmt(costs.base_cost)}</span></div>
+          <div className="flex justify-between text-orange-600"><span>+ Falha ({piece.failure_rate}%)</span><span>{fmt(costs.failure_addition)}</span></div>
+          <div className="flex justify-between font-bold border-t border-border pt-1"><span>Total Peça</span><span>{fmt(costs.total_cost)}</span></div>
+        </div>
+      </CardContent>
+    </Card>
   );
 }

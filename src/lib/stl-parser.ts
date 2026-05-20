@@ -23,7 +23,32 @@ export function parseSTLVolume(buffer: ArrayBuffer): number {
     }
   }
 
-  throw new Error("Formato STL não suportado. Use arquivos STL binários.");
+  return parseAsciiSTL(buffer);
+}
+
+function parseAsciiSTL(buffer: ArrayBuffer): number {
+  const text = new TextDecoder().decode(buffer);
+  const vertexRegex = /vertex\s+(-?\d+(?:\.\d+)?(?:e[-+]?\d+)?)\s+(-?\d+(?:\.\d+)?(?:e[-+]?\d+)?)\s+(-?\d+(?:\.\d+)?(?:e[-+]?\d+)?)/gi;
+  const vertices: Array<[number, number, number]> = [];
+  let match: RegExpExecArray | null;
+
+  while ((match = vertexRegex.exec(text)) !== null) {
+    vertices.push([Number(match[1]), Number(match[2]), Number(match[3])]);
+  }
+
+  if (vertices.length < 3 || vertices.length % 3 !== 0) {
+    throw new Error("Não foi possível ler o STL. Verifique se o arquivo está íntegro.");
+  }
+
+  let totalVolume = 0;
+  for (let i = 0; i < vertices.length; i += 3) {
+    const [v1x, v1y, v1z] = vertices[i];
+    const [v2x, v2y, v2z] = vertices[i + 1];
+    const [v3x, v3y, v3z] = vertices[i + 2];
+    totalVolume += signedVolumeOfTriangle(v1x, v1y, v1z, v2x, v2y, v2z, v3x, v3y, v3z);
+  }
+
+  return Math.abs(totalVolume) / 1000;
 }
 
 function parseBinarySTL(view: DataView): number {

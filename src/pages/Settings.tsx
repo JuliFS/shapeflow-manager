@@ -143,21 +143,37 @@ function MaterialsTab() {
 
   const save = useMutation({
     mutationFn: async () => {
+      if (!currentCompanyId) throw new Error("Empresa não selecionada");
+      if (!form.name?.trim()) throw new Error("Informe o nome do material");
+      if (!form.cost_per_kg || form.cost_per_kg <= 0) throw new Error("Informe um custo por kg válido");
+      const payload = { ...form, name: form.name.trim() };
       if (editId) {
-        const { error } = await supabase.from("materials").update(form).eq("id", editId);
+        const { error } = await supabase.from("materials").update(payload).eq("id", editId);
         if (error) throw error;
       } else {
-        const { error } = await supabase.from("materials").insert({ ...form, user_id: user!.id, company_id: currentCompanyId! });
+        const { error } = await supabase.from("materials").insert({ ...payload, user_id: user!.id, company_id: currentCompanyId });
         if (error) throw error;
       }
     },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["materials"] }); setOpen(false); setEditId(null); toast.success("Material salvo!"); },
-    onError: (e: any) => toast.error(e.message),
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ["materials"] });
+      await qc.refetchQueries({ queryKey: ["materials", currentCompanyId] });
+      setOpen(false);
+      setEditId(null);
+      setForm({ name: "", color: "", brand: "", cost_per_kg: 0, density: 1.24 });
+      toast.success(editId ? "Material atualizado!" : "Material criado com sucesso!");
+    },
+    onError: (e: any) => toast.error(`Erro ao salvar material: ${e?.message ?? "tente novamente"}`),
   });
 
   const remove = useMutation({
     mutationFn: async (id: string) => { const { error } = await supabase.from("materials").delete().eq("id", id); if (error) throw error; },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["materials"] }); toast.success("Removido!"); },
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ["materials"] });
+      await qc.refetchQueries({ queryKey: ["materials", currentCompanyId] });
+      toast.success("Material removido!");
+    },
+    onError: (e: any) => toast.error(`Erro ao remover material: ${e?.message ?? "tente novamente"}`),
   });
 
   return (

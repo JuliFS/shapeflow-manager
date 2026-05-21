@@ -266,16 +266,28 @@ export default function Quotes() {
 
   const save = useMutation({
     mutationFn: async () => {
+      if (!currentCompanyId) throw new Error("Empresa não selecionada");
+      if (!user?.id) throw new Error("Usuário não autenticado");
+      if (!form.piece_name?.trim()) throw new Error("Informe o nome da peça/projeto");
+      if (quoteType === "3d_print") {
+        if (!form.material_id) throw new Error("Selecione um material");
+        if (!form.weight_grams || form.weight_grams <= 0) throw new Error("Informe o peso em gramas");
+        if (!form.print_time_hours || form.print_time_hours <= 0) throw new Error("Informe o tempo de impressão");
+      }
+
       const basePayload: any = {
         client_id: form.client_id || null,
         client_name: selectedClient?.name ?? "",
-        piece_name: form.piece_name,
+        piece_name: form.piece_name.trim(),
         margin: form.margin,
         delivery_days: form.delivery_days,
         payment_method: form.payment_method,
         shipping_cost: form.shipping_cost,
         discount: form.discount,
         quote_type: quoteType,
+        total_cost: currentTotalCost,
+        base_price: currentBasePrice,
+        final_price: currentFinalPrice,
       };
 
       if (quoteType === "3d_print") {
@@ -290,7 +302,10 @@ export default function Quotes() {
           post_processing_hours: form.post_processing_hours,
           has_modeling: form.has_modeling,
           modeling_hours: form.modeling_hours,
-          ...costs3d,
+          material_cost: costs3d.material_cost,
+          machine_cost: costs3d.machine_cost,
+          labor_cost: costs3d.labor_cost,
+          modeling_cost: costs3d.modeling_cost,
           quote_data: {
             validity_days: form.validity_days, observations: form.observations, complexity,
             energy_kwh_rate: form.energy_kwh_rate, energy_consumption_kwh: form.energy_consumption_kwh,
@@ -299,15 +314,12 @@ export default function Quotes() {
           },
         });
       } else if (quoteType === "letra_caixa") {
-        const totalPrintTime = letraCaixaData.pieces.reduce((s, p) => s + p.print_time_hours, 0);
-        const totalWeight = letraCaixaData.pieces.reduce((s, p) => s + p.weight_grams, 0);
+        const totalPrintTime = letraCaixaData.pieces.reduce((s, p) => s + (p.print_time_hours || 0), 0);
+        const totalWeight = letraCaixaData.pieces.reduce((s, p) => s + (p.weight_grams || 0), 0);
         Object.assign(basePayload, {
           material_name: letraCaixaData.pieces.map(p => p.material_name).filter(Boolean).join(", ") || "—",
           weight_grams: totalWeight,
           print_time_hours: totalPrintTime,
-          total_cost: costsLC.total,
-          base_price: costsLC.base_price,
-          final_price: costsLC.final_price,
           quote_data: { ...letraCaixaData, validity_days: form.validity_days, observations: form.observations, complexity },
         });
       } else {
@@ -315,9 +327,6 @@ export default function Quotes() {
           material_name: fachadaData.base_material,
           weight_grams: 0,
           print_time_hours: 0,
-          total_cost: costsFC.total,
-          base_price: costsFC.base_price,
-          final_price: costsFC.final_price,
           quote_data: { ...fachadaData, validity_days: form.validity_days, observations: form.observations, complexity },
         });
       }
@@ -329,8 +338,8 @@ export default function Quotes() {
         const now = new Date();
         const quoteNumber = format(now, "ddMMyyyyHHmm");
         const { error } = await supabase.from("quotes").insert({
-          user_id: user!.id,
-          company_id: currentCompanyId!,
+          user_id: user.id,
+          company_id: currentCompanyId,
           quote_number: quoteNumber,
           status: "draft" as QuoteStatus,
           ...basePayload,
@@ -338,15 +347,16 @@ export default function Quotes() {
         if (error) throw error;
       }
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["quotes"] });
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ["quotes"] });
+      await qc.refetchQueries({ queryKey: ["quotes", currentCompanyId] });
       setOpen(false);
       setEditId(null);
       setEditQuoteNumber(null);
       setStlVolume(null);
-      toast.success(editId ? "Orçamento atualizado!" : "Orçamento criado!");
+      toast.success(editId ? "Orçamento atualizado com sucesso!" : "Orçamento criado com sucesso!");
     },
-    onError: (e: any) => toast.error(e.message),
+    onError: (e: any) => toast.error(`Erro ao salvar orçamento: ${e?.message ?? "tente novamente"}`),
   });
 
   const updateStatus = useMutation({

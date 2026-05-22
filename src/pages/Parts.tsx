@@ -51,9 +51,13 @@ export default function Parts() {
 
   const save = useMutation({
     mutationFn: async () => {
+      if (!user?.id) throw new Error("Usuário não autenticado");
+      if (!currentCompanyId) throw new Error("Empresa não selecionada");
+      if (!form.name.trim()) throw new Error("Informe o nome da peça");
       const mat = materials.find((m) => m.id === form.default_material_id);
       const payload = {
         ...form,
+        name: form.name.trim(),
         default_material_id: form.default_material_id || null,
         default_material_name: mat?.name ?? form.default_material_name,
       };
@@ -63,20 +67,21 @@ export default function Parts() {
       } else {
         const { error } = await supabase.from("parts").insert({
           ...payload,
-          user_id: user!.id,
-          company_id: currentCompanyId!,
+          user_id: user.id,
+          company_id: currentCompanyId,
         });
         if (error) throw error;
       }
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["parts"] });
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ["parts"] });
+      await qc.refetchQueries({ queryKey: ["parts", currentCompanyId] });
       setOpen(false);
       setEditId(null);
       setForm({ ...emptyForm });
       toast.success(editId ? "Peça atualizada!" : "Peça salva!");
     },
-    onError: (e: any) => toast.error(e.message),
+    onError: (e: any) => toast.error(`Erro ao salvar peça: ${e?.message ?? "tente novamente"}`),
   });
 
   const remove = useMutation({
@@ -88,6 +93,7 @@ export default function Parts() {
       qc.invalidateQueries({ queryKey: ["parts"] });
       toast.success("Peça removida!");
     },
+    onError: (e: any) => toast.error(`Erro ao remover peça: ${e?.message ?? "tente novamente"}`),
   });
 
   const openEdit = (p: any) => {

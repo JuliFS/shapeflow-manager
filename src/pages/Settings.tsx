@@ -165,7 +165,6 @@ function MaterialsTab() {
       if (!currentCompanyId) throw new Error("Empresa não selecionada");
       if (!form.name?.trim()) throw new Error("Informe o nome do material");
       if (!Number.isFinite(Number(form.cost_per_kg)) || Number(form.cost_per_kg) <= 0) throw new Error("Informe um custo por kg válido");
-      if (!currentCompanyId) throw new Error("Empresa não selecionada");
       const payload = { ...form, name: form.name.trim(), cost_per_kg: Number(form.cost_per_kg), density: Number(form.density) || 1.24 };
       if (editId) {
         const { error } = await supabase.from("materials").update(payload).eq("id", editId);

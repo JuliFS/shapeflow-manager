@@ -404,7 +404,9 @@ function ProfileTab() {
 
   const save = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase.from("profiles").update({
+      if (!user?.id) throw new Error("Usuário não autenticado");
+      if (!currentCompanyId) throw new Error("Empresa não selecionada");
+      const payload = {
         company_name: form.company_name,
         owner_name: form.owner_name,
         company_email: form.company_email,
@@ -414,13 +416,18 @@ function ProfileTab() {
         modeling_hourly_rate: form.modeling_hourly_rate,
         default_margin: form.default_margin / 100,
         company_logo_url: form.company_logo_url,
-      }).eq("user_id", user!.id);
+        user_id: user.id,
+        company_id: currentCompanyId,
+      };
+      const { error } = await supabase.from("profiles").upsert(payload, { onConflict: "user_id,company_id" });
       if (error) throw error;
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["profile"] });
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ["profile"] });
+      await qc.refetchQueries({ queryKey: ["profile", currentCompanyId] });
       toast.success("Perfil atualizado!");
     },
+    onError: (e: any) => saveError("perfil", e),
   });
 
   return (
@@ -507,22 +514,30 @@ function PricingTab() {
 
   const save = useMutation({
     mutationFn: async () => {
+      if (!currentCompanyId) throw new Error("Empresa não selecionada");
+      const payload = {
+        markup_3d_print: Number(form.markup_3d_print) || 0,
+        markup_letra_caixa: Number(form.markup_letra_caixa) || 0,
+        markup_fachada_completa: Number(form.markup_fachada_completa) || 0,
+        min_profit_percent: Number(form.min_profit_percent) || 0,
+      };
       if (config) {
-        const { error } = await supabase.from("pricing_config").update(form).eq("id", config.id);
+        const { error } = await supabase.from("pricing_config").update(payload).eq("id", config.id);
         if (error) throw error;
       } else {
         const { error } = await supabase.from("pricing_config").insert({
-          company_id: currentCompanyId!,
-          ...form,
+          company_id: currentCompanyId,
+          ...payload,
         } as any);
         if (error) throw error;
       }
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["pricing_config"] });
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ["pricing_config"] });
+      await qc.refetchQueries({ queryKey: ["pricing_config", currentCompanyId] });
       toast.success("Configurações de precificação salvas!");
     },
-    onError: (e: any) => toast.error(e.message),
+    onError: (e: any) => saveError("precificação", e),
   });
 
   if (isLoading) return <p className="text-muted-foreground">Carregando...</p>;

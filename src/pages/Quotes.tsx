@@ -336,23 +336,35 @@ export default function Quotes() {
         });
       }
 
+      let savedQuote: any = null;
       if (editId) {
-        const { error } = await supabase.from("quotes").update(basePayload).eq("id", editId);
+        const { data, error } = await supabase.from("quotes").update(basePayload).eq("id", editId).select("*").single();
         if (error) throw error;
+        savedQuote = data;
       } else {
         const now = new Date();
-        const quoteNumber = format(now, "ddMMyyyyHHmm");
-        const { error } = await supabase.from("quotes").insert({
+        const quoteNumber = format(now, "ddMMyyyyHHmmss");
+        const { data, error } = await supabase.from("quotes").insert({
           user_id: user.id,
           company_id: currentCompanyId,
           quote_number: quoteNumber,
           status: "draft" as QuoteStatus,
           ...basePayload,
-        });
+        }).select("*").single();
         if (error) throw error;
+        savedQuote = data;
       }
+
+      return savedQuote;
     },
-    onSuccess: async () => {
+    onSuccess: async (savedQuote) => {
+      if (savedQuote) {
+        qc.setQueryData(["quotes", currentCompanyId], (old: any[] | undefined) => {
+          const list = old ?? [];
+          const exists = list.some((q) => q.id === savedQuote.id);
+          return exists ? list.map((q) => (q.id === savedQuote.id ? savedQuote : q)) : [savedQuote, ...list];
+        });
+      }
       await qc.invalidateQueries({ queryKey: ["quotes"] });
       await qc.refetchQueries({ queryKey: ["quotes", currentCompanyId] });
       setOpen(false);

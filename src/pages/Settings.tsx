@@ -15,6 +15,9 @@ import { Badge } from "@/components/ui/badge";
 import { Plus, Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
+const saveError = (entity: string, error: any) => toast.error(`Erro ao salvar ${entity}: ${error?.message ?? "tente novamente"}`);
+const removeError = (entity: string, error: any) => toast.error(`Erro ao remover ${entity}: ${error?.message ?? "tente novamente"}`);
+
 function PrintersTab() {
   const { user } = useAuth();
   const { currentCompanyId } = useCompany();
@@ -37,21 +40,36 @@ function PrintersTab() {
 
   const save = useMutation({
     mutationFn: async () => {
+      if (!user?.id) throw new Error("Usuário não autenticado");
+      if (!currentCompanyId) throw new Error("Empresa não selecionada");
+      if (!form.name.trim()) throw new Error("Informe o nome da impressora");
+      const payload = {
+        ...form,
+        name: form.name.trim(),
+        cost_per_hour: costPerHour,
+      };
       if (editId) {
-        const { error } = await supabase.from("printers").update(form).eq("id", editId);
+        const { error } = await supabase.from("printers").update(payload).eq("id", editId);
         if (error) throw error;
       } else {
-        const { error } = await supabase.from("printers").insert({ ...form, user_id: user!.id, company_id: currentCompanyId! });
+        const { error } = await supabase.from("printers").insert({ ...payload, user_id: user.id, company_id: currentCompanyId });
         if (error) throw error;
       }
     },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["printers"] }); setOpen(false); setEditId(null); toast.success("Impressora salva!"); },
-    onError: (e: any) => toast.error(e.message),
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ["printers"] });
+      await qc.refetchQueries({ queryKey: ["printers", currentCompanyId] });
+      setOpen(false);
+      setEditId(null);
+      toast.success(editId ? "Impressora atualizada!" : "Impressora criada com sucesso!");
+    },
+    onError: (e: any) => saveError("impressora", e),
   });
 
   const remove = useMutation({
     mutationFn: async (id: string) => { const { error } = await supabase.from("printers").delete().eq("id", id); if (error) throw error; },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["printers"] }); toast.success("Removida!"); },
+    onSuccess: async () => { await qc.invalidateQueries({ queryKey: ["printers"] }); toast.success("Impressora removida!"); },
+    onError: (e: any) => removeError("impressora", e),
   });
 
   const openEdit = (p: any) => {

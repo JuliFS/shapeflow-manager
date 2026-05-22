@@ -419,7 +419,9 @@ function ProfileTab() {
         user_id: user.id,
         company_id: currentCompanyId,
       };
-      const { error } = await supabase.from("profiles").upsert(payload, { onConflict: "user_id,company_id" });
+      const { error } = profile?.id
+        ? await supabase.from("profiles").update(payload).eq("id", profile.id)
+        : await supabase.from("profiles").insert(payload);
       if (error) throw error;
     },
     onSuccess: async () => {

@@ -26,18 +26,41 @@ export function AppHeader() {
   const { companies, currentCompanyId, currentCompany, setCurrentCompanyId, refetch } = useCompany();
   const [newCompanyOpen, setNewCompanyOpen] = useState(false);
   const [newCompanyName, setNewCompanyName] = useState("");
+  const [creatingCompany, setCreatingCompany] = useState(false);
 
   const createCompany = async () => {
-    if (!newCompanyName.trim() || !user) return;
-    const { data: company, error } = await supabase.from("companies").insert({ name: newCompanyName.trim() }).select().single();
-    if (error) { toast.error(error.message); return; }
-    const { error: linkError } = await supabase.from("user_companies").insert({ user_id: user.id, company_id: company.id, role: "owner" });
-    if (linkError) { toast.error(linkError.message); return; }
-    toast.success("Empresa criada!");
-    setNewCompanyOpen(false);
-    setNewCompanyName("");
-    refetch();
-    setCurrentCompanyId(company.id);
+    const companyName = newCompanyName.trim();
+    if (!companyName) { toast.error("Informe o nome da empresa."); return; }
+    if (!user?.id) { toast.error("Você precisa estar logado para criar uma empresa."); return; }
+
+    setCreatingCompany(true);
+    try {
+      const companyId = crypto.randomUUID();
+      const { error: companyError } = await supabase.from("companies").insert({ id: companyId, name: companyName });
+      if (companyError) throw companyError;
+
+      const { error: linkError } = await supabase.from("user_companies").insert({ user_id: user.id, company_id: companyId, role: "owner" });
+      if (linkError) throw linkError;
+
+      const { error: profileError } = await supabase.from("profiles").insert({
+        user_id: user.id,
+        company_id: companyId,
+        company_name: companyName,
+        owner_name: user.user_metadata?.full_name ?? "",
+        company_email: user.email ?? "",
+      });
+      if (profileError) throw profileError;
+
+      setCurrentCompanyId(companyId);
+      await refetch();
+      toast.success("Empresa criada com sucesso!");
+      setNewCompanyOpen(false);
+      setNewCompanyName("");
+    } catch (err: any) {
+      toast.error(`Erro ao criar empresa: ${err?.message ?? "tente novamente"}`);
+    } finally {
+      setCreatingCompany(false);
+    }
   };
 
   return (
@@ -82,7 +105,9 @@ export function AppHeader() {
                 <Label>Nome da Empresa *</Label>
                 <Input value={newCompanyName} onChange={(e) => setNewCompanyName(e.target.value)} required placeholder="Nome da empresa" />
               </div>
-              <Button type="submit" className="w-full">Criar Empresa</Button>
+              <Button type="submit" className="w-full" disabled={creatingCompany}>
+                {creatingCompany ? "Criando..." : "Criar Empresa"}
+              </Button>
             </form>
           </DialogContent>
         </Dialog>

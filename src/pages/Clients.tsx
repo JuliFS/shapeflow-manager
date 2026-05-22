@@ -44,22 +44,27 @@ export default function Clients() {
 
   const save = useMutation({
     mutationFn: async () => {
+      if (!user?.id) throw new Error("Usuário não autenticado");
+      if (!currentCompanyId) throw new Error("Empresa não selecionada");
+      if (!form.name.trim()) throw new Error("Informe o nome do cliente");
+      const payload = { ...form, name: form.name.trim() };
       if (editId) {
-        const { error } = await supabase.from("clients").update(form).eq("id", editId);
+        const { error } = await supabase.from("clients").update(payload).eq("id", editId);
         if (error) throw error;
       } else {
-        const { error } = await supabase.from("clients").insert({ ...form, user_id: user!.id, company_id: currentCompanyId! });
+        const { error } = await supabase.from("clients").insert({ ...payload, user_id: user.id, company_id: currentCompanyId });
         if (error) throw error;
       }
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["clients"] });
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ["clients"] });
+      await qc.refetchQueries({ queryKey: ["clients", currentCompanyId] });
       setOpen(false);
       setForm(emptyForm);
       setEditId(null);
       toast.success(editId ? "Cliente atualizado!" : "Cliente cadastrado!");
     },
-    onError: (e: any) => toast.error(e.message),
+    onError: (e: any) => toast.error(`Erro ao salvar cliente: ${e?.message ?? "tente novamente"}`),
   });
 
   const remove = useMutation({
@@ -71,6 +76,7 @@ export default function Clients() {
       qc.invalidateQueries({ queryKey: ["clients"] });
       toast.success("Cliente removido!");
     },
+    onError: (e: any) => toast.error(`Erro ao remover cliente: ${e?.message ?? "tente novamente"}`),
   });
 
   const filtered = clients.filter((c: any) =>

@@ -15,6 +15,9 @@ import { Badge } from "@/components/ui/badge";
 import { Plus, Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
+const saveError = (entity: string, error: any) => toast.error(`Erro ao salvar ${entity}: ${error?.message ?? "tente novamente"}`);
+const removeError = (entity: string, error: any) => toast.error(`Erro ao remover ${entity}: ${error?.message ?? "tente novamente"}`);
+
 function PrintersTab() {
   const { user } = useAuth();
   const { currentCompanyId } = useCompany();
@@ -37,21 +40,36 @@ function PrintersTab() {
 
   const save = useMutation({
     mutationFn: async () => {
+      if (!user?.id) throw new Error("Usuário não autenticado");
+      if (!currentCompanyId) throw new Error("Empresa não selecionada");
+      if (!form.name.trim()) throw new Error("Informe o nome da impressora");
+      const payload = {
+        ...form,
+        name: form.name.trim(),
+        cost_per_hour: costPerHour,
+      };
       if (editId) {
-        const { error } = await supabase.from("printers").update(form).eq("id", editId);
+        const { error } = await supabase.from("printers").update(payload).eq("id", editId);
         if (error) throw error;
       } else {
-        const { error } = await supabase.from("printers").insert({ ...form, user_id: user!.id, company_id: currentCompanyId! });
+        const { error } = await supabase.from("printers").insert({ ...payload, user_id: user.id, company_id: currentCompanyId });
         if (error) throw error;
       }
     },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["printers"] }); setOpen(false); setEditId(null); toast.success("Impressora salva!"); },
-    onError: (e: any) => toast.error(e.message),
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ["printers"] });
+      await qc.refetchQueries({ queryKey: ["printers", currentCompanyId] });
+      setOpen(false);
+      setEditId(null);
+      toast.success(editId ? "Impressora atualizada!" : "Impressora criada com sucesso!");
+    },
+    onError: (e: any) => saveError("impressora", e),
   });
 
   const remove = useMutation({
     mutationFn: async (id: string) => { const { error } = await supabase.from("printers").delete().eq("id", id); if (error) throw error; },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["printers"] }); toast.success("Removida!"); },
+    onSuccess: async () => { await qc.invalidateQueries({ queryKey: ["printers"] }); toast.success("Impressora removida!"); },
+    onError: (e: any) => removeError("impressora", e),
   });
 
   const openEdit = (p: any) => {
@@ -143,15 +161,16 @@ function MaterialsTab() {
 
   const save = useMutation({
     mutationFn: async () => {
+      if (!user?.id) throw new Error("Usuário não autenticado");
       if (!currentCompanyId) throw new Error("Empresa não selecionada");
       if (!form.name?.trim()) throw new Error("Informe o nome do material");
-      if (!form.cost_per_kg || form.cost_per_kg <= 0) throw new Error("Informe um custo por kg válido");
-      const payload = { ...form, name: form.name.trim() };
+      if (!Number.isFinite(Number(form.cost_per_kg)) || Number(form.cost_per_kg) <= 0) throw new Error("Informe um custo por kg válido");
+      const payload = { ...form, name: form.name.trim(), cost_per_kg: Number(form.cost_per_kg), density: Number(form.density) || 1.24 };
       if (editId) {
         const { error } = await supabase.from("materials").update(payload).eq("id", editId);
         if (error) throw error;
       } else {
-        const { error } = await supabase.from("materials").insert({ ...payload, user_id: user!.id, company_id: currentCompanyId });
+        const { error } = await supabase.from("materials").insert({ ...payload, user_id: user.id, company_id: currentCompanyId });
         if (error) throw error;
       }
     },
@@ -254,15 +273,26 @@ function SoftwareTab() {
 
   const save = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase.from("software").insert({ ...form, user_id: user!.id, company_id: currentCompanyId! });
+      if (!user?.id) throw new Error("Usuário não autenticado");
+      if (!currentCompanyId) throw new Error("Empresa não selecionada");
+      if (!form.name.trim()) throw new Error("Informe o nome do software");
+      const { error } = await supabase.from("software").insert({ ...form, name: form.name.trim(), user_id: user.id, company_id: currentCompanyId });
       if (error) throw error;
     },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["software"] }); setOpen(false); toast.success("Software salvo!"); },
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ["software"] });
+      await qc.refetchQueries({ queryKey: ["software", currentCompanyId] });
+      setOpen(false);
+      setForm({ name: "", monthly_cost: 0, category: "" });
+      toast.success("Software salvo!");
+    },
+    onError: (e: any) => saveError("software", e),
   });
 
   const remove = useMutation({
     mutationFn: async (id: string) => { const { error } = await supabase.from("software").delete().eq("id", id); if (error) throw error; },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["software"] }); toast.success("Removido!"); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["software"] }); toast.success("Software removido!"); },
+    onError: (e: any) => removeError("software", e),
   });
 
   return (
@@ -374,7 +404,9 @@ function ProfileTab() {
 
   const save = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase.from("profiles").update({
+      if (!user?.id) throw new Error("Usuário não autenticado");
+      if (!currentCompanyId) throw new Error("Empresa não selecionada");
+      const payload = {
         company_name: form.company_name,
         owner_name: form.owner_name,
         company_email: form.company_email,
@@ -384,13 +416,20 @@ function ProfileTab() {
         modeling_hourly_rate: form.modeling_hourly_rate,
         default_margin: form.default_margin / 100,
         company_logo_url: form.company_logo_url,
-      }).eq("user_id", user!.id);
+        user_id: user.id,
+        company_id: currentCompanyId,
+      };
+      const { error } = profile?.id
+        ? await supabase.from("profiles").update(payload).eq("id", profile.id)
+        : await supabase.from("profiles").insert(payload);
       if (error) throw error;
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["profile"] });
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ["profile"] });
+      await qc.refetchQueries({ queryKey: ["profile", currentCompanyId] });
       toast.success("Perfil atualizado!");
     },
+    onError: (e: any) => saveError("perfil", e),
   });
 
   return (
@@ -477,22 +516,30 @@ function PricingTab() {
 
   const save = useMutation({
     mutationFn: async () => {
+      if (!currentCompanyId) throw new Error("Empresa não selecionada");
+      const payload = {
+        markup_3d_print: Number(form.markup_3d_print) || 0,
+        markup_letra_caixa: Number(form.markup_letra_caixa) || 0,
+        markup_fachada_completa: Number(form.markup_fachada_completa) || 0,
+        min_profit_percent: Number(form.min_profit_percent) || 0,
+      };
       if (config) {
-        const { error } = await supabase.from("pricing_config").update(form).eq("id", config.id);
+        const { error } = await supabase.from("pricing_config").update(payload).eq("id", config.id);
         if (error) throw error;
       } else {
         const { error } = await supabase.from("pricing_config").insert({
-          company_id: currentCompanyId!,
-          ...form,
+          company_id: currentCompanyId,
+          ...payload,
         } as any);
         if (error) throw error;
       }
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["pricing_config"] });
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ["pricing_config"] });
+      await qc.refetchQueries({ queryKey: ["pricing_config", currentCompanyId] });
       toast.success("Configurações de precificação salvas!");
     },
-    onError: (e: any) => toast.error(e.message),
+    onError: (e: any) => saveError("precificação", e),
   });
 
   if (isLoading) return <p className="text-muted-foreground">Carregando...</p>;

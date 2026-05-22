@@ -42,6 +42,11 @@ const quoteTypeLabels: Record<QuoteType, string> = {
   "fachada_completa": "Fachada Completa",
 };
 
+const toSafeNumber = (value: unknown, fallback = 0) => {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+};
+
 type Complexity = "simples" | "medio" | "complexo";
 const complexityMultipliers: Record<Complexity, number> = { simples: 1, medio: 1.5, complexo: 2 };
 
@@ -279,15 +284,15 @@ export default function Quotes() {
         client_id: form.client_id || null,
         client_name: selectedClient?.name ?? "",
         piece_name: form.piece_name.trim(),
-        margin: form.margin,
-        delivery_days: form.delivery_days,
-        payment_method: form.payment_method,
-        shipping_cost: form.shipping_cost,
-        discount: form.discount,
+        margin: toSafeNumber(form.margin, 0.3),
+        delivery_days: Math.max(0, Math.round(toSafeNumber(form.delivery_days, 7))),
+        payment_method: form.payment_method || null,
+        shipping_cost: toSafeNumber(form.shipping_cost),
+        discount: toSafeNumber(form.discount),
         quote_type: quoteType,
-        total_cost: currentTotalCost,
-        base_price: currentBasePrice,
-        final_price: currentFinalPrice,
+        total_cost: toSafeNumber(currentTotalCost),
+        base_price: toSafeNumber(currentBasePrice),
+        final_price: toSafeNumber(currentFinalPrice),
       };
 
       if (quoteType === "3d_print") {
@@ -296,16 +301,16 @@ export default function Quotes() {
           printer_name: selectedPrinter?.name ?? "",
           material_id: form.material_id || null,
           material_name: selectedMaterial?.name ?? "",
-          weight_grams: form.weight_grams,
-          print_time_hours: form.print_time_hours,
+          weight_grams: toSafeNumber(form.weight_grams),
+          print_time_hours: toSafeNumber(form.print_time_hours),
           finishing: form.finishing,
-          post_processing_hours: form.post_processing_hours,
+          post_processing_hours: toSafeNumber(form.post_processing_hours),
           has_modeling: form.has_modeling,
-          modeling_hours: form.modeling_hours,
-          material_cost: costs3d.material_cost,
-          machine_cost: costs3d.machine_cost,
-          labor_cost: costs3d.labor_cost,
-          modeling_cost: costs3d.modeling_cost,
+          modeling_hours: toSafeNumber(form.modeling_hours),
+          material_cost: toSafeNumber(costs3d.material_cost),
+          machine_cost: toSafeNumber(costs3d.machine_cost),
+          labor_cost: toSafeNumber(costs3d.labor_cost),
+          modeling_cost: toSafeNumber(costs3d.modeling_cost),
           quote_data: {
             validity_days: form.validity_days, observations: form.observations, complexity,
             energy_kwh_rate: form.energy_kwh_rate, energy_consumption_kwh: form.energy_consumption_kwh,
@@ -331,23 +336,35 @@ export default function Quotes() {
         });
       }
 
+      let savedQuote: any = null;
       if (editId) {
-        const { error } = await supabase.from("quotes").update(basePayload).eq("id", editId);
+        const { data, error } = await supabase.from("quotes").update(basePayload).eq("id", editId).select("*").single();
         if (error) throw error;
+        savedQuote = data;
       } else {
         const now = new Date();
-        const quoteNumber = format(now, "ddMMyyyyHHmm");
-        const { error } = await supabase.from("quotes").insert({
+        const quoteNumber = format(now, "ddMMyyyyHHmmss");
+        const { data, error } = await supabase.from("quotes").insert({
           user_id: user.id,
           company_id: currentCompanyId,
           quote_number: quoteNumber,
           status: "draft" as QuoteStatus,
           ...basePayload,
-        });
+        }).select("*").single();
         if (error) throw error;
+        savedQuote = data;
       }
+
+      return savedQuote;
     },
-    onSuccess: async () => {
+    onSuccess: async (savedQuote) => {
+      if (savedQuote) {
+        qc.setQueryData(["quotes", currentCompanyId], (old: any[] | undefined) => {
+          const list = old ?? [];
+          const exists = list.some((q) => q.id === savedQuote.id);
+          return exists ? list.map((q) => (q.id === savedQuote.id ? savedQuote : q)) : [savedQuote, ...list];
+        });
+      }
       await qc.invalidateQueries({ queryKey: ["quotes"] });
       await qc.refetchQueries({ queryKey: ["quotes", currentCompanyId] });
       setOpen(false);

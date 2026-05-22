@@ -41,22 +41,29 @@ export default function Stock() {
 
   const save = useMutation({
     mutationFn: async () => {
+      if (!user?.id) throw new Error("Usuário não autenticado");
+      if (!currentCompanyId) throw new Error("Empresa não selecionada");
+      if (!form.material_id && !form.material_name.trim()) throw new Error("Selecione ou informe um material");
+      if (!Number.isFinite(Number(form.initial_weight_g)) || Number(form.initial_weight_g) <= 0) throw new Error("Informe um peso inicial válido");
       const mat = materials.find((m) => m.id === form.material_id);
       const { error } = await supabase.from("filament_stock").insert({
-        user_id: user!.id,
-        company_id: currentCompanyId!,
+        user_id: user.id,
+        company_id: currentCompanyId,
         material_id: form.material_id || null,
-        material_name: mat?.name ?? form.material_name,
-        initial_weight_g: form.initial_weight_g,
-        remaining_weight_g: form.initial_weight_g,
+        material_name: mat?.name ?? form.material_name.trim(),
+        initial_weight_g: Number(form.initial_weight_g),
+        remaining_weight_g: Number(form.initial_weight_g),
       });
       if (error) throw error;
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["stock"] });
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ["stock"] });
+      await qc.refetchQueries({ queryKey: ["stock", currentCompanyId] });
       setOpen(false);
+      setForm({ material_id: "", material_name: "", initial_weight_g: 1000, remaining_weight_g: 1000 });
       toast.success("Estoque adicionado!");
     },
+    onError: (e: any) => toast.error(`Erro ao salvar estoque: ${e?.message ?? "tente novamente"}`),
   });
 
   const remove = useMutation({
@@ -68,6 +75,7 @@ export default function Stock() {
       qc.invalidateQueries({ queryKey: ["stock"] });
       toast.success("Removido!");
     },
+    onError: (e: any) => toast.error(`Erro ao remover estoque: ${e?.message ?? "tente novamente"}`),
   });
 
   return (

@@ -161,15 +161,17 @@ function MaterialsTab() {
 
   const save = useMutation({
     mutationFn: async () => {
+      if (!user?.id) throw new Error("Usuário não autenticado");
       if (!currentCompanyId) throw new Error("Empresa não selecionada");
       if (!form.name?.trim()) throw new Error("Informe o nome do material");
-      if (!form.cost_per_kg || form.cost_per_kg <= 0) throw new Error("Informe um custo por kg válido");
-      const payload = { ...form, name: form.name.trim() };
+      if (!Number.isFinite(Number(form.cost_per_kg)) || Number(form.cost_per_kg) <= 0) throw new Error("Informe um custo por kg válido");
+      if (!currentCompanyId) throw new Error("Empresa não selecionada");
+      const payload = { ...form, name: form.name.trim(), cost_per_kg: Number(form.cost_per_kg), density: Number(form.density) || 1.24 };
       if (editId) {
         const { error } = await supabase.from("materials").update(payload).eq("id", editId);
         if (error) throw error;
       } else {
-        const { error } = await supabase.from("materials").insert({ ...payload, user_id: user!.id, company_id: currentCompanyId });
+        const { error } = await supabase.from("materials").insert({ ...payload, user_id: user.id, company_id: currentCompanyId });
         if (error) throw error;
       }
     },
@@ -272,15 +274,26 @@ function SoftwareTab() {
 
   const save = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase.from("software").insert({ ...form, user_id: user!.id, company_id: currentCompanyId! });
+      if (!user?.id) throw new Error("Usuário não autenticado");
+      if (!currentCompanyId) throw new Error("Empresa não selecionada");
+      if (!form.name.trim()) throw new Error("Informe o nome do software");
+      const { error } = await supabase.from("software").insert({ ...form, name: form.name.trim(), user_id: user.id, company_id: currentCompanyId });
       if (error) throw error;
     },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["software"] }); setOpen(false); toast.success("Software salvo!"); },
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ["software"] });
+      await qc.refetchQueries({ queryKey: ["software", currentCompanyId] });
+      setOpen(false);
+      setForm({ name: "", monthly_cost: 0, category: "" });
+      toast.success("Software salvo!");
+    },
+    onError: (e: any) => saveError("software", e),
   });
 
   const remove = useMutation({
     mutationFn: async (id: string) => { const { error } = await supabase.from("software").delete().eq("id", id); if (error) throw error; },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["software"] }); toast.success("Removido!"); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["software"] }); toast.success("Software removido!"); },
+    onError: (e: any) => removeError("software", e),
   });
 
   return (

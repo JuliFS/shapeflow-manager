@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCompany } from "@/contexts/CompanyContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -353,7 +353,8 @@ function ProfileTab() {
   const { data: profile } = useQuery({
     queryKey: ["profile", currentCompanyId],
     queryFn: async () => {
-      const { data } = await supabase.from("profiles").select("*").eq("company_id", currentCompanyId!).single();
+      const { data, error } = await supabase.from("profiles").select("*").eq("company_id", currentCompanyId!).maybeSingle();
+      if (error) throw error;
       return data;
     },
     enabled: !!currentCompanyId,
@@ -364,9 +365,8 @@ function ProfileTab() {
     hourly_rate: 50, modeling_hourly_rate: 80, default_margin: 30, company_logo_url: "",
   });
 
-  const [loaded, setLoaded] = useState(false);
-
-  if (profile && !loaded) {
+  useEffect(() => {
+    if (!profile) return;
     setForm({
       company_name: profile.company_name ?? "",
       owner_name: profile.owner_name ?? "",
@@ -378,25 +378,39 @@ function ProfileTab() {
       default_margin: (profile.default_margin ?? 0.3) * 100,
       company_logo_url: profile.company_logo_url ?? "",
     });
-    setLoaded(true);
-  }
+  }, [profile?.id]);
 
   const handleLogoUpload = async (file: File) => {
-    if (!user || !currentCompanyId) return;
+    if (!user || !currentCompanyId) { toast.error("Selecione uma empresa antes de enviar o logo"); return; }
     setUploading(true);
     try {
-      const ext = file.name.split(".").pop();
+      const ext = (file.name.split(".").pop() || "png").toLowerCase();
       const path = `${currentCompanyId}/logo.${ext}`;
-      const { error: uploadError } = await supabase.storage.from("logos").upload(path, file, { upsert: true });
+      const { error: uploadError } = await supabase.storage.from("logos").upload(path, file, { upsert: true, contentType: file.type });
       if (uploadError) throw uploadError;
       const { data: urlData } = supabase.storage.from("logos").getPublicUrl(path);
       const logoUrl = urlData.publicUrl + "?t=" + Date.now();
       setForm((prev) => ({ ...prev, company_logo_url: logoUrl }));
-      await supabase.from("profiles").update({ company_logo_url: logoUrl }).eq("user_id", user.id);
-      qc.invalidateQueries({ queryKey: ["profile"] });
-      toast.success("Logo enviado!");
+
+      if (profile?.id) {
+        const { error } = await supabase.from("profiles").update({ company_logo_url: logoUrl }).eq("id", profile.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from("profiles").insert({
+          user_id: user.id,
+          company_id: currentCompanyId,
+          company_logo_url: logoUrl,
+          company_name: form.company_name || "",
+          owner_name: form.owner_name || "",
+          company_email: form.company_email || user.email || "",
+        });
+        if (error) throw error;
+      }
+      await qc.invalidateQueries({ queryKey: ["profile"] });
+      await qc.refetchQueries({ queryKey: ["profile", currentCompanyId] });
+      toast.success("Logo enviado com sucesso!");
     } catch (err: any) {
-      toast.error(err.message || "Erro ao enviar logo");
+      toast.error(`Erro ao enviar logo: ${err?.message ?? "tente novamente"}`);
     } finally {
       setUploading(false);
     }

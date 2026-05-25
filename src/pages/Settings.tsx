@@ -174,7 +174,13 @@ function MaterialsTab() {
       if (!currentCompanyId) throw new Error("Empresa não selecionada");
       if (!form.name?.trim()) throw new Error("Informe o nome do material");
       if (!Number.isFinite(Number(form.cost_per_kg)) || Number(form.cost_per_kg) <= 0) throw new Error("Informe um custo por kg válido");
-      const payload = { ...form, name: form.name.trim(), cost_per_kg: Number(form.cost_per_kg), density: Number(form.density) || 1.24 };
+      const payload = {
+        name: form.name.trim(),
+        color: form.color?.trim() || null,
+        brand: form.brand?.trim() || null,
+        cost_per_kg: toNumber(form.cost_per_kg),
+        density: toNumber(form.density, 1.24) || 1.24,
+      };
       if (editId) {
         const { error } = await supabase.from("materials").update(payload).eq("id", editId);
         if (error) throw error;
@@ -285,7 +291,14 @@ function SoftwareTab() {
       if (!user?.id) throw new Error("Usuário não autenticado");
       if (!currentCompanyId) throw new Error("Empresa não selecionada");
       if (!form.name.trim()) throw new Error("Informe o nome do software");
-      const { error } = await supabase.from("software").insert({ ...form, name: form.name.trim(), user_id: user.id, company_id: currentCompanyId });
+      const payload = {
+        name: form.name.trim(),
+        monthly_cost: toNumber(form.monthly_cost),
+        category: form.category?.trim() || null,
+        user_id: user.id,
+        company_id: currentCompanyId,
+      };
+      const { error } = await supabase.from("software").insert(payload);
       if (error) throw error;
     },
     onSuccess: async () => {
@@ -300,7 +313,11 @@ function SoftwareTab() {
 
   const remove = useMutation({
     mutationFn: async (id: string) => { const { error } = await supabase.from("software").delete().eq("id", id); if (error) throw error; },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["software"] }); toast.success("Software removido!"); },
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ["software"] });
+      await qc.refetchQueries({ queryKey: ["software", currentCompanyId] });
+      toast.success("Software removido!");
+    },
     onError: (e: any) => removeError("software", e),
   });
 

@@ -682,6 +682,8 @@ export default function Quotes() {
         const getMachineRate = () => printers[0]?.cost_per_hour ?? 0;
         const c = calcLetraCaixaCosts(lcData, hourlyRate, modelingRate, getMaterialCost, getMachineRate);
         if (c.printing > 0) items.push({ name: "Estrutura em impressão 3D", desc: `${lcData.pieces?.length ?? 0} peças`, value: applyMargin(c.printing) });
+        const softwareCost = toSafeNumber((lcData as any).software_cost);
+        if (softwareCost > 0) items.push({ name: "Softwares", desc: "rateio dos softwares de produção", value: applyMargin(softwareCost) });
         if (c.modeling > 0) items.push({ name: "Modelagem 3D", desc: `${lcData.modeling_hours}h de projeto`, value: applyMargin(c.modeling) });
         if (c.components > 0) {
           const compParts: string[] = [];

@@ -372,7 +372,7 @@ function SoftwareTab() {
 
 function ProfileTab() {
   const { user } = useAuth();
-  const { currentCompanyId } = useCompany();
+  const { currentCompanyId, refetch } = useCompany();
   const qc = useQueryClient();
   const [uploading, setUploading] = useState(false);
 
@@ -463,10 +463,19 @@ function ProfileTab() {
         ? await supabase.from("profiles").update(payload).eq("id", profile.id)
         : await supabase.from("profiles").insert(payload);
       if (error) throw error;
+
+      if (payload.company_name) {
+        const { error: companyError } = await supabase
+          .from("companies")
+          .update({ name: payload.company_name })
+          .eq("id", currentCompanyId);
+        if (companyError) throw companyError;
+      }
     },
     onSuccess: async () => {
       await qc.invalidateQueries({ queryKey: ["profile"] });
       await qc.refetchQueries({ queryKey: ["profile", currentCompanyId] });
+      await refetch();
       toast.success("Empresa salva com sucesso!");
     },
     onError: (e: any) => saveError("empresa", e),

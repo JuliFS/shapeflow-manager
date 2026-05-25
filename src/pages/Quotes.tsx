@@ -111,6 +111,15 @@ export default function Quotes() {
     enabled: !!currentCompanyId,
   });
 
+  const { data: software = [] } = useQuery({
+    queryKey: ["software", currentCompanyId],
+    queryFn: async () => {
+      const { data } = await supabase.from("software").select("*").eq("company_id", currentCompanyId!);
+      return data ?? [];
+    },
+    enabled: !!currentCompanyId,
+  });
+
   const { data: quotes = [] } = useQuery({
     queryKey: ["quotes", currentCompanyId],
     queryFn: async () => {
@@ -123,7 +132,7 @@ export default function Quotes() {
   const { data: profile } = useQuery({
     queryKey: ["profile", currentCompanyId],
     queryFn: async () => {
-      const { data } = await supabase.from("profiles").select("*").eq("company_id", currentCompanyId!).single();
+      const { data } = await supabase.from("profiles").select("*").eq("company_id", currentCompanyId!).maybeSingle();
       return data;
     },
     enabled: !!currentCompanyId,
@@ -196,6 +205,8 @@ export default function Quotes() {
   const selectedPrinter = printers.find((p) => p.id === form.printer_id);
   const selectedMaterial = materials.find((m) => m.id === form.material_id);
   const selectedClient = clients.find((c) => c.id === form.client_id);
+  const softwareMonthlyCost = useMemo(() => software.reduce((sum, item) => sum + toSafeNumber((item as any).monthly_cost), 0), [software]);
+  const softwareHourlyCost = softwareMonthlyCost / 176;
 
   // 3D Print costs
   const costs3d = useMemo(() => {

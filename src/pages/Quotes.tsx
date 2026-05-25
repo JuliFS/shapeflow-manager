@@ -855,6 +855,7 @@ export default function Quotes() {
         <>
           <div className="flex justify-between"><span className="text-muted-foreground">Material ({form.weight_grams}g × R$ {selectedMaterial ? (selectedMaterial.cost_per_kg / 1000).toFixed(4) : "0"}/g)</span><span>R$ {costs3d.material_cost.toFixed(2)}</span></div>
           <div className="flex justify-between"><span className="text-muted-foreground">Máquina ({form.print_time_hours}h × R$ {selectedPrinter?.cost_per_hour?.toFixed(2) ?? "0"}/h)</span><span>R$ {costs3d.machine_cost.toFixed(2)}</span></div>
+          <div className="flex justify-between"><span className="text-muted-foreground">Softwares ({form.print_time_hours}h × R$ {softwareHourlyCost.toFixed(2)}/h)</span><span>R$ {costs3d.software_cost.toFixed(2)}</span></div>
           <div className="flex justify-between"><span className="text-muted-foreground">Energia ({form.energy_consumption_kwh} kWh × {form.print_time_hours}h × R$ {form.energy_kwh_rate})</span><span>R$ {costs3d.energy_cost.toFixed(2)}</span></div>
           <div className="flex justify-between"><span className="text-muted-foreground">Mão de Obra</span><span>R$ {costs3d.labor_cost.toFixed(2)}</span></div>
           {form.has_modeling && <div className="flex justify-between"><span className="text-muted-foreground">Modelagem</span><span>R$ {costs3d.modeling_cost.toFixed(2)}</span></div>}
@@ -867,6 +868,7 @@ export default function Quotes() {
       return (
         <>
           <div className="flex justify-between"><span className="text-muted-foreground">Impressão</span><span>R$ {costsLC.printing.toFixed(2)}</span></div>
+          <div className="flex justify-between"><span className="text-muted-foreground">Softwares</span><span>R$ {costsLC.software_cost.toFixed(2)}</span></div>
           <div className="flex justify-between"><span className="text-muted-foreground">Modelagem</span><span>R$ {costsLC.modeling.toFixed(2)}</span></div>
           <div className="flex justify-between"><span className="text-muted-foreground">Componentes</span><span>R$ {costsLC.components.toFixed(2)}</span></div>
           <div className="flex justify-between"><span className="text-muted-foreground">Instalação</span><span>R$ {costsLC.installation.toFixed(2)}</span></div>

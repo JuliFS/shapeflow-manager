@@ -330,7 +330,8 @@ export default function Quotes() {
             validity_days: form.validity_days, observations: form.observations, complexity,
             energy_kwh_rate: form.energy_kwh_rate, energy_consumption_kwh: form.energy_consumption_kwh,
             failure_rate: form.failure_rate, labor_cost_manual: form.labor_cost_manual,
-            energy_cost: costs3d.energy_cost, base_cost: costs3d.base_cost,
+            energy_cost: costs3d.energy_cost, software_cost: costs3d.software_cost, software_hourly_cost: softwareHourlyCost,
+            software_monthly_cost: softwareMonthlyCost, base_cost: costs3d.base_cost,
           },
         });
       } else if (quoteType === "letra_caixa") {
@@ -340,7 +341,7 @@ export default function Quotes() {
           material_name: letraCaixaData.pieces.map(p => p.material_name).filter(Boolean).join(", ") || "—",
           weight_grams: totalWeight,
           print_time_hours: totalPrintTime,
-          quote_data: { ...letraCaixaData, validity_days: form.validity_days, observations: form.observations, complexity },
+          quote_data: { ...letraCaixaData, validity_days: form.validity_days, observations: form.observations, complexity, software_cost: costsLC.software_cost, software_hourly_cost: softwareHourlyCost, software_monthly_cost: softwareMonthlyCost },
         });
       } else {
         Object.assign(basePayload, {

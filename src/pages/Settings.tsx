@@ -15,6 +15,11 @@ import { Badge } from "@/components/ui/badge";
 import { Plus, Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
+const toNumber = (value: unknown, fallback = 0) => {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+};
+
 const saveError = (entity: string, error: any) => toast.error(`Erro ao salvar ${entity}: ${error?.message ?? "tente novamente"}`);
 const removeError = (entity: string, error: any) => toast.error(`Erro ao remover ${entity}: ${error?.message ?? "tente novamente"}`);
 
@@ -44,8 +49,12 @@ function PrintersTab() {
       if (!currentCompanyId) throw new Error("Empresa não selecionada");
       if (!form.name.trim()) throw new Error("Informe o nome da impressora");
       const payload = {
-        ...form,
         name: form.name.trim(),
+        purchase_cost: toNumber(form.purchase_cost),
+        lifespan_hours: Math.max(1, toNumber(form.lifespan_hours, 1)),
+        power_consumption_watts: toNumber(form.power_consumption_watts),
+        energy_cost_per_kwh: toNumber(form.energy_cost_per_kwh),
+        maintenance_cost_per_hour: toNumber(form.maintenance_cost_per_hour),
         cost_per_hour: costPerHour,
       };
       if (editId) {
@@ -78,7 +87,7 @@ function PrintersTab() {
     setOpen(true);
   };
 
-  const costPerHour = (form.purchase_cost / Math.max(form.lifespan_hours, 1)) + ((form.power_consumption_watts / 1000) * form.energy_cost_per_kwh) + form.maintenance_cost_per_hour;
+  const costPerHour = (toNumber(form.purchase_cost) / Math.max(toNumber(form.lifespan_hours, 1), 1)) + ((toNumber(form.power_consumption_watts) / 1000) * toNumber(form.energy_cost_per_kwh)) + toNumber(form.maintenance_cost_per_hour);
 
   return (
     <div className="space-y-4">

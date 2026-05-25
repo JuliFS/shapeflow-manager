@@ -15,6 +15,11 @@ import { Badge } from "@/components/ui/badge";
 import { Plus, Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
+const toNumber = (value: unknown, fallback = 0) => {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+};
+
 const saveError = (entity: string, error: any) => toast.error(`Erro ao salvar ${entity}: ${error?.message ?? "tente novamente"}`);
 const removeError = (entity: string, error: any) => toast.error(`Erro ao remover ${entity}: ${error?.message ?? "tente novamente"}`);
 
@@ -44,8 +49,12 @@ function PrintersTab() {
       if (!currentCompanyId) throw new Error("Empresa não selecionada");
       if (!form.name.trim()) throw new Error("Informe o nome da impressora");
       const payload = {
-        ...form,
         name: form.name.trim(),
+        purchase_cost: toNumber(form.purchase_cost),
+        lifespan_hours: Math.max(1, toNumber(form.lifespan_hours, 1)),
+        power_consumption_watts: toNumber(form.power_consumption_watts),
+        energy_cost_per_kwh: toNumber(form.energy_cost_per_kwh),
+        maintenance_cost_per_hour: toNumber(form.maintenance_cost_per_hour),
         cost_per_hour: costPerHour,
       };
       if (editId) {
@@ -78,7 +87,7 @@ function PrintersTab() {
     setOpen(true);
   };
 
-  const costPerHour = (form.purchase_cost / Math.max(form.lifespan_hours, 1)) + ((form.power_consumption_watts / 1000) * form.energy_cost_per_kwh) + form.maintenance_cost_per_hour;
+  const costPerHour = (toNumber(form.purchase_cost) / Math.max(toNumber(form.lifespan_hours, 1), 1)) + ((toNumber(form.power_consumption_watts) / 1000) * toNumber(form.energy_cost_per_kwh)) + toNumber(form.maintenance_cost_per_hour);
 
   return (
     <div className="space-y-4">
@@ -165,7 +174,13 @@ function MaterialsTab() {
       if (!currentCompanyId) throw new Error("Empresa não selecionada");
       if (!form.name?.trim()) throw new Error("Informe o nome do material");
       if (!Number.isFinite(Number(form.cost_per_kg)) || Number(form.cost_per_kg) <= 0) throw new Error("Informe um custo por kg válido");
-      const payload = { ...form, name: form.name.trim(), cost_per_kg: Number(form.cost_per_kg), density: Number(form.density) || 1.24 };
+      const payload = {
+        name: form.name.trim(),
+        color: form.color?.trim() || null,
+        brand: form.brand?.trim() || null,
+        cost_per_kg: toNumber(form.cost_per_kg),
+        density: toNumber(form.density, 1.24) || 1.24,
+      };
       if (editId) {
         const { error } = await supabase.from("materials").update(payload).eq("id", editId);
         if (error) throw error;
@@ -276,7 +291,14 @@ function SoftwareTab() {
       if (!user?.id) throw new Error("Usuário não autenticado");
       if (!currentCompanyId) throw new Error("Empresa não selecionada");
       if (!form.name.trim()) throw new Error("Informe o nome do software");
-      const { error } = await supabase.from("software").insert({ ...form, name: form.name.trim(), user_id: user.id, company_id: currentCompanyId });
+      const payload = {
+        name: form.name.trim(),
+        monthly_cost: toNumber(form.monthly_cost),
+        category: form.category?.trim() || null,
+        user_id: user.id,
+        company_id: currentCompanyId,
+      };
+      const { error } = await supabase.from("software").insert(payload);
       if (error) throw error;
     },
     onSuccess: async () => {
@@ -291,7 +313,11 @@ function SoftwareTab() {
 
   const remove = useMutation({
     mutationFn: async (id: string) => { const { error } = await supabase.from("software").delete().eq("id", id); if (error) throw error; },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["software"] }); toast.success("Software removido!"); },
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ["software"] });
+      await qc.refetchQueries({ queryKey: ["software", currentCompanyId] });
+      toast.success("Software removido!");
+    },
     onError: (e: any) => removeError("software", e),
   });
 
@@ -346,7 +372,7 @@ function SoftwareTab() {
 
 function ProfileTab() {
   const { user } = useAuth();
-  const { currentCompanyId } = useCompany();
+  const { currentCompanyId, refetch } = useCompany();
   const qc = useQueryClient();
   const [uploading, setUploading] = useState(false);
 
@@ -421,14 +447,14 @@ function ProfileTab() {
       if (!user?.id) throw new Error("Usuário não autenticado");
       if (!currentCompanyId) throw new Error("Empresa não selecionada");
       const payload = {
-        company_name: form.company_name,
-        owner_name: form.owner_name,
-        company_email: form.company_email,
-        company_phone: form.company_phone,
-        company_address: form.company_address,
-        hourly_rate: form.hourly_rate,
-        modeling_hourly_rate: form.modeling_hourly_rate,
-        default_margin: form.default_margin / 100,
+        company_name: form.company_name.trim(),
+        owner_name: form.owner_name.trim(),
+        company_email: form.company_email.trim(),
+        company_phone: form.company_phone.trim(),
+        company_address: form.company_address.trim(),
+        hourly_rate: toNumber(form.hourly_rate, 50),
+        modeling_hourly_rate: toNumber(form.modeling_hourly_rate, 80),
+        default_margin: toNumber(form.default_margin, 30) / 100,
         company_logo_url: form.company_logo_url,
         user_id: user.id,
         company_id: currentCompanyId,
@@ -437,13 +463,22 @@ function ProfileTab() {
         ? await supabase.from("profiles").update(payload).eq("id", profile.id)
         : await supabase.from("profiles").insert(payload);
       if (error) throw error;
+
+      if (payload.company_name) {
+        const { error: companyError } = await supabase
+          .from("companies")
+          .update({ name: payload.company_name })
+          .eq("id", currentCompanyId);
+        if (companyError) throw companyError;
+      }
     },
     onSuccess: async () => {
       await qc.invalidateQueries({ queryKey: ["profile"] });
       await qc.refetchQueries({ queryKey: ["profile", currentCompanyId] });
-      toast.success("Perfil atualizado!");
+      await refetch();
+      toast.success("Empresa salva com sucesso!");
     },
-    onError: (e: any) => saveError("perfil", e),
+    onError: (e: any) => saveError("empresa", e),
   });
 
   return (

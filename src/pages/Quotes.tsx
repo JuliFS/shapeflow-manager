@@ -111,6 +111,15 @@ export default function Quotes() {
     enabled: !!currentCompanyId,
   });
 
+  const { data: software = [] } = useQuery({
+    queryKey: ["software", currentCompanyId],
+    queryFn: async () => {
+      const { data } = await supabase.from("software").select("*").eq("company_id", currentCompanyId!);
+      return data ?? [];
+    },
+    enabled: !!currentCompanyId,
+  });
+
   const { data: quotes = [] } = useQuery({
     queryKey: ["quotes", currentCompanyId],
     queryFn: async () => {
@@ -123,7 +132,7 @@ export default function Quotes() {
   const { data: profile } = useQuery({
     queryKey: ["profile", currentCompanyId],
     queryFn: async () => {
-      const { data } = await supabase.from("profiles").select("*").eq("company_id", currentCompanyId!).single();
+      const { data } = await supabase.from("profiles").select("*").eq("company_id", currentCompanyId!).maybeSingle();
       return data;
     },
     enabled: !!currentCompanyId,
@@ -196,6 +205,8 @@ export default function Quotes() {
   const selectedPrinter = printers.find((p) => p.id === form.printer_id);
   const selectedMaterial = materials.find((m) => m.id === form.material_id);
   const selectedClient = clients.find((c) => c.id === form.client_id);
+  const softwareMonthlyCost = useMemo(() => software.reduce((sum, item) => sum + toSafeNumber((item as any).monthly_cost), 0), [software]);
+  const softwareHourlyCost = softwareMonthlyCost / 176;
 
   // 3D Print costs
   const costs3d = useMemo(() => {
@@ -206,16 +217,17 @@ export default function Quotes() {
 
     const material_cost = form.weight_grams * costPerGram;
     const machine_cost = form.print_time_hours * machineRate;
+    const software_cost = form.print_time_hours * softwareHourlyCost;
     const energy_cost = form.energy_consumption_kwh * form.print_time_hours * form.energy_kwh_rate;
     const labor_cost = form.post_processing_hours * hourlyRate + form.labor_cost_manual;
     const modeling_cost = form.has_modeling ? form.modeling_hours * modelingRate : 0;
-    const base_cost = material_cost + machine_cost + energy_cost + labor_cost + modeling_cost;
+    const base_cost = material_cost + machine_cost + software_cost + energy_cost + labor_cost + modeling_cost;
     const total_cost = base_cost * (1 + form.failure_rate / 100);
     const base_price = total_cost * (1 + form.margin);
     const final_price = base_price - form.discount + form.shipping_cost;
 
-    return { material_cost, machine_cost, energy_cost, labor_cost, modeling_cost, base_cost, total_cost, base_price, final_price };
-  }, [form, selectedPrinter, selectedMaterial, profile]);
+    return { material_cost, machine_cost, software_cost, energy_cost, labor_cost, modeling_cost, base_cost, total_cost, base_price, final_price };
+  }, [form, selectedPrinter, selectedMaterial, profile, softwareHourlyCost]);
 
   // Letra Caixa costs
   const costsLC = useMemo(() => {
@@ -230,18 +242,23 @@ export default function Quotes() {
       return p?.cost_per_hour ?? 0;
     };
     const c = calcLetraCaixaCosts(letraCaixaData, hourlyRate, modelingRate, getMaterialCostPerGram, getMachineRate);
-    const base_price = c.total * (1 + form.margin);
+    const totalPrintTime = letraCaixaData.pieces.reduce((s, p) => s + toSafeNumber(p.print_time_hours), 0);
+    const software_cost = totalPrintTime * softwareHourlyCost;
+    const total = c.total + software_cost;
+    const base_price = total * (1 + form.margin);
     const final_price = base_price - form.discount + form.shipping_cost;
-    return { ...c, base_price, final_price };
-  }, [letraCaixaData, form.margin, form.discount, form.shipping_cost, profile, materials, printers]);
+    return { ...c, software_cost, total, base_price, final_price };
+  }, [letraCaixaData, form.margin, form.discount, form.shipping_cost, profile, materials, printers, softwareHourlyCost]);
 
   // Fachada costs
   const costsFC = useMemo(() => {
     const c = calcFachadaCosts(fachadaData);
-    const base_price = c.total * (1 + form.margin);
+    const software_cost = toSafeNumber(fachadaData.install_time_hours) * softwareHourlyCost;
+    const total = c.total + software_cost;
+    const base_price = total * (1 + form.margin);
     const final_price = base_price - form.discount + form.shipping_cost;
-    return { ...c, base_price, final_price };
-  }, [fachadaData, form.margin, form.discount, form.shipping_cost]);
+    return { ...c, software_cost, total, base_price, final_price };
+  }, [fachadaData, form.margin, form.discount, form.shipping_cost, softwareHourlyCost]);
 
   const currentTotalCost = quoteType === "3d_print" ? costs3d.total_cost : quoteType === "letra_caixa" ? costsLC.total : costsFC.total;
   const currentBasePrice = quoteType === "3d_print" ? costs3d.base_price : quoteType === "letra_caixa" ? costsLC.base_price : costsFC.base_price;
@@ -315,7 +332,8 @@ export default function Quotes() {
             validity_days: form.validity_days, observations: form.observations, complexity,
             energy_kwh_rate: form.energy_kwh_rate, energy_consumption_kwh: form.energy_consumption_kwh,
             failure_rate: form.failure_rate, labor_cost_manual: form.labor_cost_manual,
-            energy_cost: costs3d.energy_cost, base_cost: costs3d.base_cost,
+            energy_cost: costs3d.energy_cost, software_cost: costs3d.software_cost, software_hourly_cost: softwareHourlyCost,
+            software_monthly_cost: softwareMonthlyCost, base_cost: costs3d.base_cost,
           },
         });
       } else if (quoteType === "letra_caixa") {
@@ -325,14 +343,14 @@ export default function Quotes() {
           material_name: letraCaixaData.pieces.map(p => p.material_name).filter(Boolean).join(", ") || "—",
           weight_grams: totalWeight,
           print_time_hours: totalPrintTime,
-          quote_data: { ...letraCaixaData, validity_days: form.validity_days, observations: form.observations, complexity },
+          quote_data: { ...letraCaixaData, validity_days: form.validity_days, observations: form.observations, complexity, software_cost: costsLC.software_cost, software_hourly_cost: softwareHourlyCost, software_monthly_cost: softwareMonthlyCost },
         });
       } else {
         Object.assign(basePayload, {
           material_name: fachadaData.base_material,
           weight_grams: 0,
           print_time_hours: 0,
-          quote_data: { ...fachadaData, validity_days: form.validity_days, observations: form.observations, complexity },
+          quote_data: { ...fachadaData, validity_days: form.validity_days, observations: form.observations, complexity, software_cost: costsFC.software_cost, software_hourly_cost: softwareHourlyCost, software_monthly_cost: softwareMonthlyCost },
         });
       }
 
@@ -666,6 +684,8 @@ export default function Quotes() {
         const getMachineRate = () => printers[0]?.cost_per_hour ?? 0;
         const c = calcLetraCaixaCosts(lcData, hourlyRate, modelingRate, getMaterialCost, getMachineRate);
         if (c.printing > 0) items.push({ name: "Estrutura em impressão 3D", desc: `${lcData.pieces?.length ?? 0} peças`, value: applyMargin(c.printing) });
+        const softwareCost = toSafeNumber((lcData as any).software_cost);
+        if (softwareCost > 0) items.push({ name: "Softwares", desc: "rateio dos softwares de produção", value: applyMargin(softwareCost) });
         if (c.modeling > 0) items.push({ name: "Modelagem 3D", desc: `${lcData.modeling_hours}h de projeto`, value: applyMargin(c.modeling) });
         if (c.components > 0) {
           const compParts: string[] = [];
@@ -686,6 +706,8 @@ export default function Quotes() {
         if (c.letraCaixa > 0) items.push({ name: "Letras Caixa", desc: "conjunto de letras caixa", value: applyMargin(c.letraCaixa) });
         if (c.illumination > 0) items.push({ name: "Iluminação externa", desc: `${fcData.ext_light_qty}x ${fcData.ext_light_type}`, value: applyMargin(c.illumination) });
         if (c.design > 0) items.push({ name: "Projeto / Design", desc: "criação visual", value: applyMargin(c.design) });
+        const softwareCost = toSafeNumber((fcData as any).software_cost);
+        if (softwareCost > 0) items.push({ name: "Softwares", desc: "rateio dos softwares de produção", value: applyMargin(softwareCost) });
         if (c.installation > 0) items.push({ name: "Instalação", desc: "mão de obra, equipamentos e transporte", value: applyMargin(c.installation) });
       }
     }
@@ -839,6 +861,7 @@ export default function Quotes() {
         <>
           <div className="flex justify-between"><span className="text-muted-foreground">Material ({form.weight_grams}g × R$ {selectedMaterial ? (selectedMaterial.cost_per_kg / 1000).toFixed(4) : "0"}/g)</span><span>R$ {costs3d.material_cost.toFixed(2)}</span></div>
           <div className="flex justify-between"><span className="text-muted-foreground">Máquina ({form.print_time_hours}h × R$ {selectedPrinter?.cost_per_hour?.toFixed(2) ?? "0"}/h)</span><span>R$ {costs3d.machine_cost.toFixed(2)}</span></div>
+          <div className="flex justify-between"><span className="text-muted-foreground">Softwares ({form.print_time_hours}h × R$ {softwareHourlyCost.toFixed(2)}/h)</span><span>R$ {costs3d.software_cost.toFixed(2)}</span></div>
           <div className="flex justify-between"><span className="text-muted-foreground">Energia ({form.energy_consumption_kwh} kWh × {form.print_time_hours}h × R$ {form.energy_kwh_rate})</span><span>R$ {costs3d.energy_cost.toFixed(2)}</span></div>
           <div className="flex justify-between"><span className="text-muted-foreground">Mão de Obra</span><span>R$ {costs3d.labor_cost.toFixed(2)}</span></div>
           {form.has_modeling && <div className="flex justify-between"><span className="text-muted-foreground">Modelagem</span><span>R$ {costs3d.modeling_cost.toFixed(2)}</span></div>}
@@ -851,6 +874,7 @@ export default function Quotes() {
       return (
         <>
           <div className="flex justify-between"><span className="text-muted-foreground">Impressão</span><span>R$ {costsLC.printing.toFixed(2)}</span></div>
+          <div className="flex justify-between"><span className="text-muted-foreground">Softwares</span><span>R$ {costsLC.software_cost.toFixed(2)}</span></div>
           <div className="flex justify-between"><span className="text-muted-foreground">Modelagem</span><span>R$ {costsLC.modeling.toFixed(2)}</span></div>
           <div className="flex justify-between"><span className="text-muted-foreground">Componentes</span><span>R$ {costsLC.components.toFixed(2)}</span></div>
           <div className="flex justify-between"><span className="text-muted-foreground">Instalação</span><span>R$ {costsLC.installation.toFixed(2)}</span></div>
@@ -865,6 +889,7 @@ export default function Quotes() {
         <div className="flex justify-between"><span className="text-muted-foreground">Letras Caixa</span><span>R$ {costsFC.letraCaixa.toFixed(2)}</span></div>
         <div className="flex justify-between"><span className="text-muted-foreground">Iluminação</span><span>R$ {costsFC.illumination.toFixed(2)}</span></div>
         <div className="flex justify-between"><span className="text-muted-foreground">Design</span><span>R$ {costsFC.design.toFixed(2)}</span></div>
+        <div className="flex justify-between"><span className="text-muted-foreground">Softwares</span><span>R$ {costsFC.software_cost.toFixed(2)}</span></div>
         <div className="flex justify-between"><span className="text-muted-foreground">Instalação</span><span>R$ {costsFC.installation.toFixed(2)}</span></div>
       </>
     );

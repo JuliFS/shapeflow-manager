@@ -44,6 +44,7 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
 
     if (!memberships || memberships.length === 0) {
       setCompanies([]);
+      setCurrentCompanyIdState(null);
       setLoading(false);
       return;
     }

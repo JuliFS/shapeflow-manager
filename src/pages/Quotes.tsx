@@ -217,16 +217,17 @@ export default function Quotes() {
 
     const material_cost = form.weight_grams * costPerGram;
     const machine_cost = form.print_time_hours * machineRate;
+    const software_cost = form.print_time_hours * softwareHourlyCost;
     const energy_cost = form.energy_consumption_kwh * form.print_time_hours * form.energy_kwh_rate;
     const labor_cost = form.post_processing_hours * hourlyRate + form.labor_cost_manual;
     const modeling_cost = form.has_modeling ? form.modeling_hours * modelingRate : 0;
-    const base_cost = material_cost + machine_cost + energy_cost + labor_cost + modeling_cost;
+    const base_cost = material_cost + machine_cost + software_cost + energy_cost + labor_cost + modeling_cost;
     const total_cost = base_cost * (1 + form.failure_rate / 100);
     const base_price = total_cost * (1 + form.margin);
     const final_price = base_price - form.discount + form.shipping_cost;
 
-    return { material_cost, machine_cost, energy_cost, labor_cost, modeling_cost, base_cost, total_cost, base_price, final_price };
-  }, [form, selectedPrinter, selectedMaterial, profile]);
+    return { material_cost, machine_cost, software_cost, energy_cost, labor_cost, modeling_cost, base_cost, total_cost, base_price, final_price };
+  }, [form, selectedPrinter, selectedMaterial, profile, softwareHourlyCost]);
 
   // Letra Caixa costs
   const costsLC = useMemo(() => {
@@ -241,10 +242,13 @@ export default function Quotes() {
       return p?.cost_per_hour ?? 0;
     };
     const c = calcLetraCaixaCosts(letraCaixaData, hourlyRate, modelingRate, getMaterialCostPerGram, getMachineRate);
-    const base_price = c.total * (1 + form.margin);
+    const totalPrintTime = letraCaixaData.pieces.reduce((s, p) => s + toSafeNumber(p.print_time_hours), 0);
+    const software_cost = totalPrintTime * softwareHourlyCost;
+    const total = c.total + software_cost;
+    const base_price = total * (1 + form.margin);
     const final_price = base_price - form.discount + form.shipping_cost;
-    return { ...c, base_price, final_price };
-  }, [letraCaixaData, form.margin, form.discount, form.shipping_cost, profile, materials, printers]);
+    return { ...c, software_cost, total, base_price, final_price };
+  }, [letraCaixaData, form.margin, form.discount, form.shipping_cost, profile, materials, printers, softwareHourlyCost]);
 
   // Fachada costs
   const costsFC = useMemo(() => {

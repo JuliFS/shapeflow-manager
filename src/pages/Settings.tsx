@@ -447,14 +447,14 @@ function ProfileTab() {
       if (!user?.id) throw new Error("Usuário não autenticado");
       if (!currentCompanyId) throw new Error("Empresa não selecionada");
       const payload = {
-        company_name: form.company_name,
-        owner_name: form.owner_name,
-        company_email: form.company_email,
-        company_phone: form.company_phone,
-        company_address: form.company_address,
-        hourly_rate: form.hourly_rate,
-        modeling_hourly_rate: form.modeling_hourly_rate,
-        default_margin: form.default_margin / 100,
+        company_name: form.company_name.trim(),
+        owner_name: form.owner_name.trim(),
+        company_email: form.company_email.trim(),
+        company_phone: form.company_phone.trim(),
+        company_address: form.company_address.trim(),
+        hourly_rate: toNumber(form.hourly_rate, 50),
+        modeling_hourly_rate: toNumber(form.modeling_hourly_rate, 80),
+        default_margin: toNumber(form.default_margin, 30) / 100,
         company_logo_url: form.company_logo_url,
         user_id: user.id,
         company_id: currentCompanyId,
@@ -467,9 +467,9 @@ function ProfileTab() {
     onSuccess: async () => {
       await qc.invalidateQueries({ queryKey: ["profile"] });
       await qc.refetchQueries({ queryKey: ["profile", currentCompanyId] });
-      toast.success("Perfil atualizado!");
+      toast.success("Empresa salva com sucesso!");
     },
-    onError: (e: any) => saveError("perfil", e),
+    onError: (e: any) => saveError("empresa", e),
   });
 
   return (

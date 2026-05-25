@@ -253,10 +253,12 @@ export default function Quotes() {
   // Fachada costs
   const costsFC = useMemo(() => {
     const c = calcFachadaCosts(fachadaData);
-    const base_price = c.total * (1 + form.margin);
+    const software_cost = toSafeNumber(fachadaData.install_time_hours) * softwareHourlyCost;
+    const total = c.total + software_cost;
+    const base_price = total * (1 + form.margin);
     const final_price = base_price - form.discount + form.shipping_cost;
-    return { ...c, base_price, final_price };
-  }, [fachadaData, form.margin, form.discount, form.shipping_cost]);
+    return { ...c, software_cost, total, base_price, final_price };
+  }, [fachadaData, form.margin, form.discount, form.shipping_cost, softwareHourlyCost]);
 
   const currentTotalCost = quoteType === "3d_print" ? costs3d.total_cost : quoteType === "letra_caixa" ? costsLC.total : costsFC.total;
   const currentBasePrice = quoteType === "3d_print" ? costs3d.base_price : quoteType === "letra_caixa" ? costsLC.base_price : costsFC.base_price;
@@ -348,7 +350,7 @@ export default function Quotes() {
           material_name: fachadaData.base_material,
           weight_grams: 0,
           print_time_hours: 0,
-          quote_data: { ...fachadaData, validity_days: form.validity_days, observations: form.observations, complexity },
+          quote_data: { ...fachadaData, validity_days: form.validity_days, observations: form.observations, complexity, software_cost: costsFC.software_cost, software_hourly_cost: softwareHourlyCost, software_monthly_cost: softwareMonthlyCost },
         });
       }
 

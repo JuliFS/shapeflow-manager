@@ -706,6 +706,8 @@ export default function Quotes() {
         if (c.letraCaixa > 0) items.push({ name: "Letras Caixa", desc: "conjunto de letras caixa", value: applyMargin(c.letraCaixa) });
         if (c.illumination > 0) items.push({ name: "Iluminação externa", desc: `${fcData.ext_light_qty}x ${fcData.ext_light_type}`, value: applyMargin(c.illumination) });
         if (c.design > 0) items.push({ name: "Projeto / Design", desc: "criação visual", value: applyMargin(c.design) });
+        const softwareCost = toSafeNumber((fcData as any).software_cost);
+        if (softwareCost > 0) items.push({ name: "Softwares", desc: "rateio dos softwares de produção", value: applyMargin(softwareCost) });
         if (c.installation > 0) items.push({ name: "Instalação", desc: "mão de obra, equipamentos e transporte", value: applyMargin(c.installation) });
       }
     }
@@ -887,6 +889,7 @@ export default function Quotes() {
         <div className="flex justify-between"><span className="text-muted-foreground">Letras Caixa</span><span>R$ {costsFC.letraCaixa.toFixed(2)}</span></div>
         <div className="flex justify-between"><span className="text-muted-foreground">Iluminação</span><span>R$ {costsFC.illumination.toFixed(2)}</span></div>
         <div className="flex justify-between"><span className="text-muted-foreground">Design</span><span>R$ {costsFC.design.toFixed(2)}</span></div>
+        <div className="flex justify-between"><span className="text-muted-foreground">Softwares</span><span>R$ {costsFC.software_cost.toFixed(2)}</span></div>
         <div className="flex justify-between"><span className="text-muted-foreground">Instalação</span><span>R$ {costsFC.installation.toFixed(2)}</span></div>
       </>
     );

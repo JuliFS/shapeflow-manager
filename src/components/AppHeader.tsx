@@ -34,14 +34,30 @@ export function AppHeader() {
     if (!user?.id) { toast.error("Você precisa estar logado para criar uma empresa."); return; }
 
     setCreatingCompany(true);
+    console.log("[createCompany] starting for user", user.id, "name=", companyName);
     try {
       const companyId = crypto.randomUUID();
-      const { error: companyError } = await supabase.from("companies").insert({ id: companyId, name: companyName });
-      if (companyError) throw companyError;
 
-      const { error: linkError } = await supabase.from("user_companies").insert({ user_id: user.id, company_id: companyId, role: "owner" });
-      if (linkError) throw linkError;
+      console.log("[createCompany] inserting company", companyId);
+      const { error: companyError } = await supabase
+        .from("companies")
+        .insert({ id: companyId, name: companyName });
+      if (companyError) {
+        console.error("[createCompany] companies insert error:", companyError);
+        throw new Error(`Empresa: ${companyError.message}`);
+      }
 
+      console.log("[createCompany] linking user_companies");
+      const { error: linkError } = await supabase
+        .from("user_companies")
+        .insert({ user_id: user.id, company_id: companyId, role: "owner" });
+      if (linkError) {
+        console.error("[createCompany] user_companies insert error:", linkError);
+        throw new Error(`Vínculo: ${linkError.message}`);
+      }
+
+      // Profile is optional — don't block creation if it fails
+      console.log("[createCompany] inserting profile (best-effort)");
       const { error: profileError } = await supabase.from("profiles").insert({
         user_id: user.id,
         company_id: companyId,
@@ -49,14 +65,17 @@ export function AppHeader() {
         owner_name: user.user_metadata?.full_name ?? "",
         company_email: user.email ?? "",
       });
-      if (profileError) throw profileError;
+      if (profileError) {
+        console.warn("[createCompany] profile insert warning (non-fatal):", profileError);
+      }
 
-      setCurrentCompanyId(companyId);
       await refetch();
+      setCurrentCompanyId(companyId);
       toast.success("Empresa criada com sucesso!");
       setNewCompanyOpen(false);
       setNewCompanyName("");
     } catch (err: any) {
+      console.error("[createCompany] failure:", err);
       toast.error(`Erro ao criar empresa: ${err?.message ?? "tente novamente"}`);
     } finally {
       setCreatingCompany(false);

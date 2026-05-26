@@ -16,7 +16,7 @@ interface CompanyContextType {
   currentCompany: Company | null;
   setCurrentCompanyId: (id: string) => void;
   loading: boolean;
-  refetch: () => void;
+  refetch: () => Promise<void>;
 }
 
 const CompanyContext = createContext<CompanyContextType>({} as CompanyContextType);
@@ -24,7 +24,7 @@ const CompanyContext = createContext<CompanyContextType>({} as CompanyContextTyp
 export const useCompany = () => useContext(CompanyContext);
 
 export function CompanyProvider({ children }: { children: ReactNode }) {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const [companies, setCompanies] = useState<Company[]>([]);
   const [currentCompanyId, setCurrentCompanyIdState] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -37,53 +37,69 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    const { data: memberships, error: membershipsError } = await supabase
-      .from("user_companies")
-      .select("company_id, role")
-      .eq("user_id", user.id);
+    setLoading(true);
+    try {
+      const { data: memberships, error: membershipsError } = await supabase
+        .from("user_companies")
+        .select("company_id, role")
+        .eq("user_id", user.id);
 
-    if (membershipsError) {
-      console.error("[CompanyContext] memberships error:", membershipsError);
-    }
+      if (membershipsError) {
+        console.error("[CompanyContext] memberships error:", membershipsError);
+        setLoading(false);
+        return;
+      }
 
-    if (!memberships || memberships.length === 0) {
-      setCompanies([]);
-      setCurrentCompanyIdState(null);
+      if (!memberships || memberships.length === 0) {
+        setCompanies([]);
+        setCurrentCompanyIdState(null);
+        setLoading(false);
+        return;
+      }
+
+      const companyIds = memberships.map((m: any) => m.company_id);
+      const { data: companyData, error: companiesError } = await supabase
+        .from("companies")
+        .select("*")
+        .in("id", companyIds);
+
+      if (companiesError) {
+        console.error("[CompanyContext] companies error:", companiesError);
+        setLoading(false);
+        return;
+      }
+
+      const merged = (companyData ?? []).map((c: any) => ({
+        ...c,
+        role: memberships.find((m: any) => m.company_id === c.id)?.role ?? "member",
+      }));
+
+      setCompanies(merged);
+
+      const stored = localStorage.getItem(`company_${user.id}`);
+      if (stored && merged.some((c: any) => c.id === stored)) {
+        setCurrentCompanyIdState(stored);
+      } else if (merged.length > 0) {
+        setCurrentCompanyIdState(merged[0].id);
+        localStorage.setItem(`company_${user.id}`, merged[0].id);
+      } else {
+        setCurrentCompanyIdState(null);
+      }
+    } catch (e) {
+      console.error("[CompanyContext] unexpected error:", e);
+    } finally {
       setLoading(false);
-      return;
     }
-
-    const companyIds = memberships.map((m: any) => m.company_id);
-    const { data: companyData, error: companiesError } = await supabase
-      .from("companies")
-      .select("*")
-      .in("id", companyIds);
-
-    if (companiesError) {
-      console.error("[CompanyContext] companies error:", companiesError);
-    }
-
-    const merged = (companyData ?? []).map((c: any) => ({
-      ...c,
-      role: memberships.find((m: any) => m.company_id === c.id)?.role ?? "member",
-    }));
-
-    setCompanies(merged);
-
-    const stored = localStorage.getItem(`company_${user.id}`);
-    if (stored && merged.some((c: any) => c.id === stored)) {
-      setCurrentCompanyIdState(stored);
-    } else if (merged.length > 0) {
-      setCurrentCompanyIdState(merged[0].id);
-      localStorage.setItem(`company_${user.id}`, merged[0].id);
-    }
-
-    setLoading(false);
   };
 
   useEffect(() => {
+    if (authLoading) {
+      setLoading(true);
+      return;
+    }
     fetchCompanies();
-  }, [user]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, authLoading]);
 
   const setCurrentCompanyId = (id: string) => {
     setCurrentCompanyIdState(id);
@@ -93,7 +109,7 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
   const currentCompany = companies.find((c) => c.id === currentCompanyId) ?? null;
 
   return (
-    <CompanyContext.Provider value={{ companies, currentCompanyId, currentCompany, setCurrentCompanyId, loading, refetch: fetchCompanies }}>
+    <CompanyContext.Provider value={{ companies, currentCompanyId, currentCompany, setCurrentCompanyId, loading: loading || authLoading, refetch: fetchCompanies }}>
       {children}
     </CompanyContext.Provider>
   );

@@ -37,10 +37,14 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    const { data: memberships } = await supabase
+    const { data: memberships, error: membershipsError } = await supabase
       .from("user_companies")
       .select("company_id, role")
       .eq("user_id", user.id);
+
+    if (membershipsError) {
+      console.error("[CompanyContext] memberships error:", membershipsError);
+    }
 
     if (!memberships || memberships.length === 0) {
       setCompanies([]);
@@ -50,10 +54,14 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
     }
 
     const companyIds = memberships.map((m: any) => m.company_id);
-    const { data: companyData } = await supabase
+    const { data: companyData, error: companiesError } = await supabase
       .from("companies")
       .select("*")
       .in("id", companyIds);
+
+    if (companiesError) {
+      console.error("[CompanyContext] companies error:", companiesError);
+    }
 
     const merged = (companyData ?? []).map((c: any) => ({
       ...c,

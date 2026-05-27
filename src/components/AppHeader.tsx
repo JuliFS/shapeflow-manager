@@ -90,15 +90,29 @@ export function AppHeader() {
       <div className="flex items-center gap-3">
         {/* Company switcher */}
         {companies.length > 0 && (
-          <div className="flex items-center gap-2">
-            <Building2 className="h-4 w-4 text-muted-foreground" />
-            <Select value={currentCompanyId ?? ""} onValueChange={setCurrentCompanyId}>
-              <SelectTrigger className="h-8 w-[180px] text-xs">
-                <SelectValue />
+          <div className="flex items-center gap-2 rounded-md border border-border bg-background px-2 py-1">
+            <Building2 className="h-4 w-4 text-primary" />
+            <Select
+              value={currentCompanyId ?? ""}
+              onValueChange={(id) => {
+                const c = companies.find((x) => x.id === id);
+                setCurrentCompanyId(id);
+                if (c) toast.success(`Empresa ativa: ${c.name}`);
+              }}
+            >
+              <SelectTrigger className="h-7 w-[200px] border-0 bg-transparent text-sm font-medium focus:ring-0">
+                <SelectValue placeholder="Selecione a empresa" />
               </SelectTrigger>
               <SelectContent>
                 {companies.map((c) => (
-                  <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                  <SelectItem key={c.id} value={c.id}>
+                    <div className="flex items-center gap-2">
+                      <span>{c.name}</span>
+                      <Badge variant="outline" className="text-[10px]">
+                        {planLabels[c.plan] ?? c.plan}
+                      </Badge>
+                    </div>
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>

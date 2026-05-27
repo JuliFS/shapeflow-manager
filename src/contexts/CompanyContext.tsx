@@ -32,7 +32,6 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   const fetchCompanies = async () => {
-    console.log("[CompanyContext] fetchCompanies called, user=", user?.id);
     if (!user) {
       setCompanies([]);
       setCurrentCompanyIdState(null);
@@ -42,12 +41,10 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
 
     setLoading(true);
     try {
-      console.log("[CompanyContext] querying user_companies for", user.id);
       const { data: memberships, error: membershipsError } = await supabase
         .from("user_companies")
         .select("company_id, role")
         .eq("user_id", user.id);
-      console.log("[CompanyContext] memberships result:", { memberships, membershipsError });
 
       if (membershipsError) {
         console.error("[CompanyContext] memberships error:", membershipsError);

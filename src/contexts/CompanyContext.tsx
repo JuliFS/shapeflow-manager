@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
+import { useQueryClient } from "@tanstack/react-query";
 
 interface Company {
   id: string;
@@ -25,6 +26,7 @@ export const useCompany = () => useContext(CompanyContext);
 
 export function CompanyProvider({ children }: { children: ReactNode }) {
   const { user, loading: authLoading } = useAuth();
+  const qc = useQueryClient();
   const [companies, setCompanies] = useState<Company[]>([]);
   const [currentCompanyId, setCurrentCompanyIdState] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -102,8 +104,11 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
   }, [user?.id, authLoading]);
 
   const setCurrentCompanyId = (id: string) => {
+    if (id === currentCompanyId) return;
     setCurrentCompanyIdState(id);
     if (user) localStorage.setItem(`company_${user.id}`, id);
+    // Invalidate all data queries so each page refetches for the new company
+    qc.invalidateQueries();
   };
 
   const currentCompany = companies.find((c) => c.id === currentCompanyId) ?? null;

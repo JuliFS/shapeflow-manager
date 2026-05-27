@@ -104,8 +104,11 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
   }, [user?.id, authLoading]);
 
   const setCurrentCompanyId = (id: string) => {
+    if (id === currentCompanyId) return;
     setCurrentCompanyIdState(id);
     if (user) localStorage.setItem(`company_${user.id}`, id);
+    // Invalidate all data queries so each page refetches for the new company
+    qc.invalidateQueries();
   };
 
   const currentCompany = companies.find((c) => c.id === currentCompanyId) ?? null;

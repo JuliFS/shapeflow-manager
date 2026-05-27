@@ -26,6 +26,7 @@ export const useCompany = () => useContext(CompanyContext);
 
 export function CompanyProvider({ children }: { children: ReactNode }) {
   const { user, loading: authLoading } = useAuth();
+  const qc = useQueryClient();
   const [companies, setCompanies] = useState<Company[]>([]);
   const [currentCompanyId, setCurrentCompanyIdState] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
